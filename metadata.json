@@ -1,0 +1,8 @@
+{
+  "name": "FinanceAI",
+  "description": "Sistema inteligente de gestão financeira pessoal com persistência no Excel Online e consultoria de IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
