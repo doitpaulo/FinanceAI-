@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for auth, typing, and sanitization
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Comprehensive validation of the UserDatabase schema shape
+    function isValidUserDatabase(data, userId) {
+      return data.keys().hasAll(['profile', 'settings'])
+        && data.profile is map
+        && data.profile.get('userId', '') == userId
+        && data.profile.get('name', '') is string
+        && data.profile.get('name', '').size() <= 200
+        && data.settings is map
+        && data.settings.get('currency', 'BRL') is string
+        && data.settings.get('currency', 'BRL').size() <= 10;
+    }
+
+    // User Financial Databases Match Block
+    match /user_databases/{userId} {
+      
+      // Allow single document read (get) only for verified owners
+      allow get: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+
+      // Force secure, non-delegated client queries and reject broad scraping
+      allow list: if false;
+
+      // Allow creation only if the verified owner specifies valid data
+      allow create: if isVerifiedUser() 
+        && isValidId(userId) 
+        && isOwner(userId) 
+        && isValidUserDatabase(request.resource.data, userId);
+
+      // Allow updates only if the data matches the owner ID, is validated, and hasn't changed immutable ownership
+      allow update: if isVerifiedUser() 
+        && isValidId(userId) 
+        && isOwner(userId) 
+        && isValidUserDatabase(request.resource.data, userId)
+        && request.resource.data.profile.userId == resource.data.profile.userId;
+
+      // Allow delete only for the verified owner
+      allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+    }
+  }
+}

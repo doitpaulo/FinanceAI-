@@ -1,27 +1,27 @@
 import React, { useState } from "react";
-import { Cloud, Lock, Bot, TrendingUp, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { Cloud, Lock, Bot, TrendingUp, Sparkles, ArrowRight, ShieldCheck, Database } from "lucide-react";
 import { motion } from "motion/react";
 
 interface LoginViewProps {
-  onLoginMicrosoft: () => void;
+  onLoginGoogle: () => void;
   onContinueAsGuest: () => void;
   loadingSession: boolean;
 }
 
-export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loadingSession }: LoginViewProps) {
-  const [hoveringMs, setHoveringMs] = useState(false);
+export default function LoginView({ onLoginGoogle, onContinueAsGuest, loadingSession }: LoginViewProps) {
+  const [hoveringGoogle, setHoveringGoogle] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#050505] text-slate-200 flex flex-col md:flex-row relative overflow-hidden font-sans">
       {/* Decorative Glow Effects */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-violet-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-amber-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Left Side: Brand Narrative & Visual Hook */}
       <div className="flex-1 flex flex-col justify-between p-8 md:p-16 border-b md:border-b-0 md:border-r border-white/5 relative z-10">
         {/* Logo/Header */}
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl">
+          <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl">
             <Bot className="w-6 h-6" />
           </div>
           <div>
@@ -36,10 +36,10 @@ export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loading
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-xs text-indigo-400 font-semibold"
+            className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs text-amber-400 font-semibold"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Sincronização Oficial OneDrive Ativa
+            Sincronização em Tempo Real via Firebase
           </motion.div>
 
           <motion.h2 
@@ -48,7 +48,7 @@ export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loading
             transition={{ duration: 0.6, delay: 0.1 }}
             className="text-3xl md:text-5xl font-display font-bold text-white tracking-tight leading-tight"
           >
-            Seus dados financeiros sob seu <span className="text-indigo-400">total controle</span>.
+            Seus dados financeiros sob seu <span className="text-amber-400">total controle</span>.
           </motion.h2>
 
           <motion.p 
@@ -57,7 +57,7 @@ export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loading
             transition={{ duration: 0.6, delay: 0.2 }}
             className="text-sm md:text-base text-slate-400 leading-relaxed"
           >
-            Diferente de outras plataformas, o FinanceAI salva seu banco de dados diretamente na sua conta pessoal do Microsoft OneDrive em formato aberto e seguro. Acesse e atualize suas finanças de qualquer dispositivo, mantendo a privacidade total.
+            O FinanceAI salva seu banco de dados diretamente no Firebase Firestore de forma segura e criptografada. Acesse e atualize suas finanças de qualquer dispositivo com sincronização instantânea em tempo real.
           </motion.p>
 
           {/* Quick value props */}
@@ -68,11 +68,11 @@ export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loading
             className="grid grid-cols-2 gap-4 pt-6 border-t border-white/5"
           >
             <div className="flex items-center gap-2.5">
-              <ShieldCheck className="w-4.5 h-4.5 text-indigo-400 shrink-0" />
+              <ShieldCheck className="w-4.5 h-4.5 text-amber-400 shrink-0" />
               <span className="text-xs font-semibold text-slate-300">Privacidade Absoluta</span>
             </div>
             <div className="flex items-center gap-2.5">
-              <TrendingUp className="w-4.5 h-4.5 text-indigo-400 shrink-0" />
+              <TrendingUp className="w-4.5 h-4.5 text-amber-400 shrink-0" />
               <span className="text-xs font-semibold text-slate-300">Planejamento com IA</span>
             </div>
           </motion.div>
@@ -93,28 +93,28 @@ export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loading
           className="w-full max-w-md bg-[#111111] border border-white/10 rounded-3xl p-8 md:p-10 space-y-8 shadow-2xl relative overflow-hidden"
         >
           {/* Subtle inside glow */}
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
 
           <div className="space-y-2">
             <h3 className="text-xl font-display font-bold text-white tracking-tight">Faça seu Login</h3>
             <p className="text-xs text-slate-400">
-              Conecte sua conta Microsoft para iniciar ou restaurar sua base existente.
+              Conecte sua conta do Google (Firebase) para sincronizar e proteger sua base de dados na nuvem.
             </p>
           </div>
 
           <div className="space-y-4">
-            {/* Microsoft Connection Button */}
+            {/* Google / Firebase Connection Button */}
             <button
-              id="login-microsoft-btn"
-              onClick={onLoginMicrosoft}
-              onMouseEnter={() => setHoveringMs(true)}
-              onMouseLeave={() => setHoveringMs(false)}
+              id="login-google-btn"
+              onClick={onLoginGoogle}
+              onMouseEnter={() => setHoveringGoogle(true)}
+              onMouseLeave={() => setHoveringGoogle(false)}
               disabled={loadingSession}
-              className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition duration-200 flex items-center justify-center gap-3 shadow-xl shadow-indigo-950/30 cursor-pointer active:scale-[0.98] disabled:opacity-50"
+              className="w-full py-4 px-6 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-2xl transition duration-200 flex items-center justify-center gap-3 shadow-xl shadow-amber-950/30 cursor-pointer active:scale-[0.98] disabled:opacity-50"
             >
-              <Cloud className={`w-5 h-5 ${hoveringMs ? "animate-bounce" : ""}`} />
-              <span>Conectar com Microsoft OneDrive</span>
-              <ArrowRight className="w-4 h-4 ml-auto text-indigo-200" />
+              <Database className={`w-5 h-5 ${hoveringGoogle ? "animate-pulse" : ""}`} />
+              <span>Conectar com Conta Google</span>
+              <ArrowRight className="w-4 h-4 ml-auto text-amber-200" />
             </button>
 
             {/* Guest Entry Button */}
@@ -132,8 +132,8 @@ export default function LoginView({ onLoginMicrosoft, onContinueAsGuest, loading
           {/* Secure details */}
           <div className="bg-[#050505] border border-white/5 rounded-2xl p-4 text-xs text-slate-500 space-y-1.5 leading-relaxed">
             <div className="flex gap-2">
-              <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-              <span>Suas credenciais de login e tokens são processados diretamente pelos servidores de autenticação segura da Microsoft (OAuth 2.0). Nós nunca salvamos suas senhas.</span>
+              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <span>Suas credenciais de login e tokens são processados diretamente pelos servidores de autenticação segura do Google Firebase (OAuth 2.0). Nós nunca salvamos suas senhas.</span>
             </div>
           </div>
         </motion.div>

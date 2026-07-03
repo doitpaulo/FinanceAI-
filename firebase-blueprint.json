@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "UserDatabase": {
+      "title": "UserDatabase",
+      "description": "Banco de dados de planejamento financeiro do usuário",
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object",
+          "description": "Informações do perfil financeiro e onboarding do usuário"
+        },
+        "settings": {
+          "type": "object",
+          "description": "Preferências de sistema, idioma e recursos visuais"
+        },
+        "accounts": {
+          "type": "array",
+          "description": "Lista de contas bancárias e carteiras com saldos"
+        },
+        "cards": {
+          "type": "array",
+          "description": "Lista de cartões de crédito e faturas"
+        },
+        "incomeSources": {
+          "type": "array",
+          "description": "Fontes de renda recorrente e previstas"
+        },
+        "expenses": {
+          "type": "array",
+          "description": "Lista de despesas planejadas ou fixas"
+        },
+        "transactions": {
+          "type": "array",
+          "description": "Histórico de lançamentos e movimentações"
+        },
+        "assets": {
+          "type": "array",
+          "description": "Bens patrimoniais e carteira de investimentos"
+        },
+        "liabilities": {
+          "type": "array",
+          "description": "Financiamentos e obrigações passivas"
+        },
+        "goals": {
+          "type": "array",
+          "description": "Metas financeiras de curto, médio e longo prazo"
+        },
+        "cashFlow": {
+          "type": "array",
+          "description": "Projeções matemáticas de fluxo de caixa futuro"
+        },
+        "calendar": {
+          "type": "array",
+          "description": "Vencimentos e recebimentos do calendário mensal"
+        },
+        "timeline": {
+          "type": "array",
+          "description": "Eventos de impacto no saldo histórico"
+        },
+        "events": {
+          "type": "array",
+          "description": "Marcos importantes de vida financeira"
+        },
+        "aiInsights": {
+          "type": "array",
+          "description": "Dicas e análises geradas pelo assistente com Inteligência Artificial"
+        }
+      },
+      "required": [
+        "profile",
+        "settings",
+        "accounts",
+        "cards",
+        "incomeSources",
+        "expenses",
+        "transactions",
+        "assets",
+        "liabilities",
+        "goals"
+      ]
+    }
+  },
+  "firestore": {
+    "/user_databases/{userId}": {
+      "schema": "UserDatabase",
+      "description": "Documento único contendo todo o estado financeiro pessoal do usuário"
+    }
+  }
+}

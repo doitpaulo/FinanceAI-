@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   LayoutDashboard, TrendingUp, Briefcase, Award, Bot, Settings, 
-  Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut
+  Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut, Database
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ExcelDatabase, Transaction, Asset, Liability, Goal, Profile, Settings as SettingsType } from "./types";
@@ -18,6 +18,8 @@ import ConsultorIA from "./components/ConsultorIA";
 import SettingsView from "./components/SettingsView";
 import OnboardingModal, { OnboardingData } from "./components/OnboardingModal";
 import LoginView from "./components/LoginView";
+import { auth, signInWithGoogle, logoutFirebase, fetchUserDatabaseFromFirestore, saveUserDatabaseToFirestore } from "./lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "fluxo" | "patrimonio" | "metas" | "coach" | "settings">("dashboard");
@@ -25,20 +27,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [guestMode, setGuestMode] = useState(false);
-  const [session, setSession] = useState<{ authenticated: boolean; user?: { name: string; email: string; userId: string } }>({ authenticated: false });
-
-  // Fetch Microsoft Session Status
-  const fetchSession = async () => {
-    try {
-      const res = await fetch("/api/auth/session");
-      if (res.ok) {
-        const data = await res.json();
-        setSession(data);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar sessão Microsoft:", err);
-    }
-  };
+  const [firebaseUser, setFirebaseUser] = useState<any>(null);
+  const [firebaseLoading, setFirebaseLoading] = useState(true);
 
   // Fetch Excel database from our server
   const fetchDb = async () => {
@@ -57,84 +47,124 @@ export default function App() {
     }
   };
 
+  // Listen for Firebase auth changes
   useEffect(() => {
-    fetchSession();
-    fetchDb();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      setFirebaseLoading(false);
+
+      if (user) {
+        setLoading(true);
+        try {
+          const firestoreDb = await fetchUserDatabaseFromFirestore(user.uid);
+          if (firestoreDb) {
+            setDb(firestoreDb as ExcelDatabase);
+          } else {
+            const currentYear = new Date().getFullYear();
+            const defaultDb: ExcelDatabase = {
+              profile: {
+                userId: user.uid,
+                name: user.displayName || "Usuário do Google",
+                email: user.email || "",
+                incomeType: "CLT",
+                payFrequency: "mensal",
+                financialGoal: "Reservas e Investimentos para Casa Própria",
+                riskProfile: "moderado",
+                onboardingCompleted: false,
+              },
+              settings: {
+                currency: "BRL",
+                language: "pt-BR",
+                notificationsEnabled: true,
+                aiEnabled: true,
+                darkMode: true,
+              },
+              accounts: [
+                { id: "acc-1", name: "Conta Corrente", bankName: "Banco Digital", type: "checking", balance: 1500.00, isActive: true },
+                { id: "acc-2", name: "Reserva de Emergência", bankName: "Tesouro Selic", type: "savings", balance: 5000.00, isActive: true }
+              ],
+              cards: [
+                { id: "card-1", name: "Cartão de Crédito", limit: 3000, dueDate: 10, closingDay: 3, currentInvoice: 0, availableLimit: 3000 }
+              ],
+              incomeSources: [
+                { id: "inc-1", name: "Renda Mensal", type: "CLT", frequency: "monthly", expectedValue: 3000.00, nextDate: `${currentYear}-07-05` }
+              ],
+              expenses: [
+                { id: "exp-1", name: "Moradia", category: "Moradia", amount: 1000.00, frequency: "monthly", dueDate: `${currentYear}-07-10`, isFixed: true },
+                { id: "exp-2", name: "Internet & Serviços", category: "Serviços", amount: 150.00, frequency: "monthly", dueDate: `${currentYear}-07-15`, isFixed: true }
+              ],
+              transactions: [],
+              assets: [],
+              liabilities: [],
+              goals: [
+                { id: "goal-1", name: "Reserva de Emergência de 6 meses", targetValue: 9000.00, currentValue: 5000.00, deadline: `${currentYear}-12-31`, priority: "high", status: "active" }
+              ],
+              cashFlow: [],
+              calendar: [],
+              timeline: [],
+              events: [],
+              aiInsights: []
+            };
+            await saveUserDatabaseToFirestore(user.uid, defaultDb);
+            setDb(defaultDb);
+          }
+          setError(null);
+        } catch (err: any) {
+          console.error("Erro ao carregar do Firebase Firestore:", err);
+          setError("Falha ao carregar seus dados na nuvem Firebase.");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        fetchDb();
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Listen for the postMessage indicating successful authentication from the popup
-  useEffect(() => {
-    const handleOAuthMessage = (event: MessageEvent) => {
-      const origin = event.origin;
-      // Accept messages from AI Studio preview domain, vercel or localhost
-      if (!origin.endsWith(".run.app") && !origin.includes("localhost") && !origin.endsWith(".vercel.app")) {
-        return;
-      }
-      if (event.data?.type === "OAUTH_AUTH_SUCCESS") {
-        fetchSession().then(() => fetchDb());
-      }
-    };
-    window.addEventListener("message", handleOAuthMessage);
-    return () => window.removeEventListener("message", handleOAuthMessage);
-  }, []);
-
-  // Open Microsoft OAuth popup
-  const handleConnectMicrosoft = async () => {
+  // Helper callbacks for Firebase
+  const handleLoginGoogleFirebase = async () => {
     try {
-      const res = await fetch("/api/auth/url");
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Erro ao obter link de autorização.");
-      }
-      const { url } = await res.json();
-      
-      const width = 600;
-      const height = 700;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-
-      const popup = window.open(
-        url,
-        "microsoft_oauth_popup",
-        `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
-      );
-
-      if (!popup) {
-        alert("O bloqueador de popups impediu a conexão. Por favor, autorize popups para este site e tente novamente.");
-      }
+      await signInWithGoogle();
     } catch (err: any) {
-      console.error("Falha ao abrir popup Microsoft:", err);
-      alert("Falha ao conectar com o OneDrive: " + err.message);
+      console.error("Falha ao logar com o Google (Firebase):", err);
+      alert("Falha no login com Google (Firebase): " + err.message);
     }
   };
 
-  // Logout / Disconnect Microsoft Account
-  const handleDisconnectMicrosoft = async () => {
+  const handleLogoutFirebase = async () => {
     try {
-      const res = await fetch("/api/auth/logout", { method: "POST" });
-      if (res.ok) {
-        setSession({ authenticated: false });
-        setGuestMode(false);
-        fetchDb();
-      }
+      await logoutFirebase();
+      setFirebaseUser(null);
+      setGuestMode(false);
     } catch (err) {
-      console.error("Falha ao desconectar conta Microsoft:", err);
+      console.error("Falha ao deslogar do Firebase:", err);
     }
   };
 
   // Post changes helper
   const saveDb = async (updatedDb: ExcelDatabase) => {
     setDb(updatedDb);
-    try {
-      const res = await fetch("/api/db", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedDb)
-      });
-      if (!res.ok) throw new Error("Erro de gravação no Excel simulado.");
-    } catch (err) {
-      console.error("Falha ao gravar no backend:", err);
-      alert("Alerta: Seus dados estão em cache no navegador, mas houve falha ao sincronizar com o arquivo no servidor.");
+    if (firebaseUser) {
+      try {
+        await saveUserDatabaseToFirestore(firebaseUser.uid, updatedDb);
+      } catch (err) {
+        console.error("Falha ao gravar no Firebase Firestore:", err);
+        alert("Alerta: Seus dados estão em cache no navegador, mas houve falha ao sincronizar com a nuvem Firebase.");
+      }
+    } else {
+      try {
+        const res = await fetch("/api/db", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedDb)
+        });
+        if (!res.ok) throw new Error("Erro de gravação no Excel simulado.");
+      } catch (err) {
+        console.error("Falha ao gravar no backend:", err);
+        alert("Alerta: Seus dados estão em cache no navegador, mas houve falha ao sincronizar com o arquivo no servidor.");
+      }
     }
   };
 
@@ -417,28 +447,74 @@ export default function App() {
     );
   }
 
-  if (!session.authenticated && !guestMode) {
+  if (!firebaseUser && !guestMode) {
     return (
       <LoginView
-        onLoginMicrosoft={handleConnectMicrosoft}
+        onLoginGoogle={handleLoginGoogleFirebase}
         onContinueAsGuest={() => setGuestMode(true)}
-        loadingSession={loading}
+        loadingSession={loading || firebaseLoading}
       />
     );
   }
 
   if (error || !db) {
+    const handleRetry = async () => {
+      setError(null);
+      setLoading(true);
+      if (firebaseUser) {
+        try {
+          const firestoreDb = await fetchUserDatabaseFromFirestore(firebaseUser.uid);
+          if (firestoreDb) {
+            setDb(firestoreDb as ExcelDatabase);
+          } else {
+            await fetchDb();
+          }
+        } catch (err: any) {
+          console.error("Retry failed:", err);
+          setError("Falha ao carregar seus dados na nuvem Firebase.");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        await fetchDb();
+      }
+    };
+
     return (
       <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 text-center font-sans">
-        <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+        <AlertTriangle className="w-12 h-12 text-red-500 mb-4 animate-bounce" />
         <h2 className="text-xl font-bold text-white mb-2">Erro de Inicialização</h2>
-        <p className="text-gray-400 text-sm max-w-md leading-relaxed mb-6">{error || "Falha ao carregar planilhas de simulação."}</p>
-        <button 
-          onClick={fetchDb}
-          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition"
-        >
-          Tentar Reconectar
-        </button>
+        <p className="text-gray-400 text-sm max-w-md leading-relaxed mb-6">
+          {error || "Falha ao carregar planilhas de simulação."}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button 
+            onClick={handleRetry}
+            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition cursor-pointer"
+          >
+            Tentar Reconectar
+          </button>
+          {firebaseUser && (
+            <button 
+              onClick={handleLogoutFirebase}
+              className="px-6 py-2.5 bg-rose-950/30 hover:bg-rose-900/40 border border-rose-500/20 text-rose-400 font-bold rounded-xl transition cursor-pointer"
+            >
+              Desconectar Conta Google
+            </button>
+          )}
+          {!firebaseUser && (
+            <button 
+              onClick={() => {
+                setError(null);
+                setGuestMode(true);
+                fetchDb();
+              }}
+              className="px-6 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl transition cursor-pointer"
+            >
+              Continuar como Convidado
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -450,7 +526,7 @@ export default function App() {
         {!db.profile.onboardingCompleted && (
           <OnboardingModal 
             onComplete={handleOnboardingComplete} 
-            defaultName={session.user?.name || ""}
+            defaultName={firebaseUser?.displayName || ""}
           />
         )}
       </AnimatePresence>
@@ -499,18 +575,22 @@ export default function App() {
         {/* Sync Status Info Footer */}
         <div className="p-6 border-t border-white/10 space-y-4">
           <div className="flex items-center gap-2.5 bg-[#050505] border border-white/10 p-3 rounded-xl">
-            <Cloud className={`w-4 h-4 ${session.authenticated ? "text-emerald-400 animate-pulse" : "text-indigo-400"}`} />
+            {firebaseUser ? (
+              <Database className="w-4 h-4 text-amber-400 animate-pulse" />
+            ) : (
+              <Database className="w-4 h-4 text-indigo-400" />
+            )}
             <div className="text-left">
               <span className="text-[10px] text-slate-500 uppercase font-mono block leading-none">Status</span>
               <span className="text-xs text-slate-300 font-semibold block mt-1">
-                {session.authenticated ? "OneDrive Conectado" : "Modo Simulação"}
+                {firebaseUser ? "Firebase Ativo" : "Modo Simulação"}
               </span>
             </div>
           </div>
           <p className="text-[10px] text-slate-500 font-sans leading-relaxed text-center">
-            {session.authenticated 
-              ? "Sua base de dados está 100% sincronizada com sua conta Microsoft OneDrive."
-              : "Dados persistidos localmente no servidor Express. Conecte nas Configurações."}
+            {firebaseUser 
+              ? "Sua base de dados está 100% sincronizada com o Firebase Firestore."
+              : "Rodando em cache local do servidor Express. Conecte-se na nuvem."}
           </p>
         </div>
       </aside>
@@ -527,20 +607,27 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            {firebaseUser && (
+              <span className="text-xs flex items-center gap-1.5 font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-full">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Firebase Ativo
+              </span>
+            )}
+
             <span className={`text-xs flex items-center gap-1.5 font-semibold bg-white/5 px-3 py-1 rounded-full ${
-              session.authenticated 
-                ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20" 
+              firebaseUser 
+                ? "text-amber-400 bg-amber-500/10 border border-amber-500/20" 
                 : "text-slate-400 border border-white/10"
             }`}>
               <span className={`h-1.5 w-1.5 rounded-full ${
-                session.authenticated ? "bg-emerald-500 animate-pulse" : "bg-slate-500"
+                firebaseUser ? "bg-amber-500 animate-pulse" : "bg-slate-500"
               }`} />
-              {session.authenticated ? "Nuvem OneDrive Ativa" : "Sessão Local"}
+              {firebaseUser ? "Google Logado" : "Sessão Local"}
             </span>
 
             <button
               id="topbar-logout-btn"
-              onClick={handleDisconnectMicrosoft}
+              onClick={firebaseUser ? handleLogoutFirebase : () => setGuestMode(false)}
               className="flex items-center gap-1.5 px-3 py-1 bg-[#1a1012] hover:bg-[#2c141a] border border-rose-500/15 text-rose-400 text-xs font-semibold rounded-full transition cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -594,9 +681,9 @@ export default function App() {
               {activeTab === "settings" && (
                 <SettingsView 
                   data={db} 
-                  session={session}
-                  onLoginMicrosoft={handleConnectMicrosoft}
-                  onLogoutMicrosoft={handleDisconnectMicrosoft}
+                  firebaseUser={firebaseUser}
+                  onLoginFirebase={handleLoginGoogleFirebase}
+                  onLogoutFirebase={handleLogoutFirebase}
                   onUpdateProfile={(p) => saveDb({ ...db, profile: { ...db.profile, ...p } })}
                   onUpdateSettings={(s) => saveDb({ ...db, settings: { ...db.settings, ...s } })}
                   onResetDatabase={handleResetDatabase}

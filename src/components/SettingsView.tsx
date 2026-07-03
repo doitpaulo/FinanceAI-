@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { User, Shield, RefreshCw, Settings, Info, Cloud } from "lucide-react";
+import { User, Shield, RefreshCw, Settings, Info, Cloud, Database, Sparkles } from "lucide-react";
 import { ExcelDatabase, Profile, Settings as SettingsType } from "../types";
 
 interface SettingsProps {
   data: ExcelDatabase;
-  session: { authenticated: boolean; user?: { name: string; email: string; userId: string } };
-  onLoginMicrosoft: () => void;
-  onLogoutMicrosoft: () => void;
+  firebaseUser: any;
+  onLoginFirebase: () => void;
+  onLogoutFirebase: () => void;
   onUpdateProfile: (prof: Partial<Profile>) => void;
   onUpdateSettings: (set: Partial<SettingsType>) => void;
   onResetDatabase: () => void;
@@ -14,9 +14,9 @@ interface SettingsProps {
 
 export default function SettingsView({ 
   data, 
-  session, 
-  onLoginMicrosoft, 
-  onLogoutMicrosoft, 
+  firebaseUser,
+  onLoginFirebase,
+  onLogoutFirebase,
   onUpdateProfile, 
   onUpdateSettings, 
   onResetDatabase 
@@ -149,56 +149,55 @@ export default function SettingsView({
         <div className="space-y-6">
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-indigo-400" />
+              <Database className="w-4 h-4 text-amber-400" />
               Conexões de Nuvem
             </h3>
 
-            <div className="bg-[#111111] border border-white/10 rounded-3xl p-6 space-y-4">
+            {/* Firebase Cloud Card */}
+            <div className="bg-[#111111] border border-white/10 rounded-3xl p-6 space-y-4" id="firebase-connection-card">
               <div className="flex items-start gap-3">
-                <Cloud className={`w-8 h-8 ${session.authenticated ? "text-emerald-400" : "text-indigo-400"} shrink-0`} />
+                <Database className={`w-8 h-8 ${firebaseUser ? "text-amber-400" : "text-slate-500"} shrink-0`} />
                 <div>
                   <h4 className="text-sm font-bold text-white">
-                    {session.authenticated ? "Microsoft OneDrive Ativo" : "Microsoft OneDrive Desconectado"}
+                    {firebaseUser ? "Firebase Firestore Ativo" : "Firebase Firestore Desconectado"}
                   </h4>
                   <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    {session.authenticated ? (
+                    {firebaseUser ? (
                       <span>
-                        Sua conta está conectada como <strong>{session.user?.name}</strong> ({session.user?.email}). Seus dados estão sendo salvos e lidos diretamente no seu OneDrive em: <code className="text-indigo-400 bg-white/5 px-1.5 py-0.5 rounded font-mono">/FinanceAI/finance_data.json</code>
+                        Sua conta está conectada via Google como <strong>{firebaseUser.displayName || "Usuário"}</strong> ({firebaseUser.email}). Seus dados estão sincronizados em tempo real no banco de dados distribuído globalmente do Firebase Firestore.
                       </span>
                     ) : (
-                      "Atualmente você está rodando no Modo de Simulação Local. Conecte sua conta da Microsoft para criar e sincronizar sua base de dados diretamente com seus arquivos no OneDrive."
+                      "Conecte sua conta do Google para utilizar a nuvem escalável e segura do Firebase Firestore com sincronização instantânea em múltiplos dispositivos."
                     )}
                   </p>
                 </div>
               </div>
 
-              {session.authenticated ? (
+              {firebaseUser ? (
                 <div className="space-y-3">
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 p-4 rounded-2xl text-xs leading-relaxed flex gap-2">
-                    <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Sincronização em Nuvem Ativa. Seus dados estão salvos com segurança e persistência total em sua conta Microsoft pessoal.</span>
+                  <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 p-4 rounded-2xl text-xs leading-relaxed flex gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>Sincronização em tempo real ativa no Firebase Firestore. Sinta-se à vontade para gerenciar seus dados com total segurança.</span>
                   </div>
                   <button
-                    id="microsoft-disconnect-btn"
-                    onClick={onLogoutMicrosoft}
-                    className="w-full py-2.5 bg-[#1f1215] hover:bg-[#2c141a] border border-rose-500/20 text-rose-400 font-bold rounded-xl text-xs tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5"
+                    id="firebase-disconnect-btn"
+                    onClick={onLogoutFirebase}
+                    className="w-full py-2.5 bg-[#1f1612] hover:bg-[#2c1d14] border border-amber-500/20 text-amber-400 font-bold rounded-xl text-xs tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Desconectar Conta Microsoft
+                    Desconectar Conta Google
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 p-4 rounded-2xl text-xs leading-relaxed flex gap-2">
-                    <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                    <span>Ao conectar, criaremos uma pasta segura no seu OneDrive para gerenciar e persistir sua base de dados em formato JSON.</span>
-                  </div>
                   <button
-                    id="microsoft-connect-btn"
-                    onClick={onLoginMicrosoft}
-                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs tracking-wide transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
+                    id="firebase-connect-btn"
+                    onClick={onLoginFirebase}
+                    className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs tracking-wide transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-amber-900/20 animate-pulse"
                   >
-                    <Cloud className="w-4 h-4" />
-                    Conectar com Microsoft OneDrive
+                    <div className="flex items-center justify-center w-4.5 h-4.5 bg-white rounded-full shrink-0">
+                      <span className="text-[10px] font-black text-slate-950 font-sans">G</span>
+                    </div>
+                    Conectar com Conta Google
                   </button>
                 </div>
               )}
