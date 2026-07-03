@@ -18,6 +18,7 @@ import ConsultorIA from "./components/ConsultorIA";
 import SettingsView from "./components/SettingsView";
 import OnboardingModal, { OnboardingData } from "./components/OnboardingModal";
 import LoginView from "./components/LoginView";
+import FinanceAILogo from "./components/FinanceAILogo";
 import { auth, signInWithGoogle, logoutFirebase, fetchUserDatabaseFromFirestore, saveUserDatabaseToFirestore } from "./lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -27,6 +28,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [guestMode, setGuestMode] = useState(false);
+  const [localGuestEmail, setLocalGuestEmail] = useState<string | null>(() => {
+    return localStorage.getItem("financeai_logged_in_guest");
+  });
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [firebaseLoading, setFirebaseLoading] = useState(true);
 
@@ -116,6 +120,22 @@ export default function App() {
           setLoading(false);
         }
       } else {
+        // If there's a logged-in guest in localStorage, restore it!
+        const guestEmail = localStorage.getItem("financeai_logged_in_guest");
+        if (guestEmail) {
+          const localDbStr = localStorage.getItem(`financeai_local_db_${guestEmail}`);
+          if (localDbStr) {
+            try {
+              setDb(JSON.parse(localDbStr));
+              setGuestMode(true);
+              setLoading(false);
+              setError(null);
+              return;
+            } catch (err) {
+              console.error("Falha ao carregar banco local do localStorage:", err);
+            }
+          }
+        }
         fetchDb();
       }
     });
@@ -138,9 +158,17 @@ export default function App() {
       await logoutFirebase();
       setFirebaseUser(null);
       setGuestMode(false);
+      setLocalGuestEmail(null);
+      localStorage.removeItem("financeai_logged_in_guest");
     } catch (err) {
       console.error("Falha ao deslogar do Firebase:", err);
     }
+  };
+
+  const handleLogoutLocal = () => {
+    setGuestMode(false);
+    setLocalGuestEmail(null);
+    localStorage.removeItem("financeai_logged_in_guest");
   };
 
   // Post changes helper
@@ -152,6 +180,12 @@ export default function App() {
       } catch (err) {
         console.error("Falha ao gravar no Firebase Firestore:", err);
         alert("Alerta: Seus dados estão em cache no navegador, mas houve falha ao sincronizar com a nuvem Firebase.");
+      }
+    } else if (localGuestEmail) {
+      try {
+        localStorage.setItem(`financeai_local_db_${localGuestEmail}`, JSON.stringify(updatedDb));
+      } catch (err) {
+        console.error("Falha ao gravar localmente no localStorage:", err);
       }
     } else {
       try {
@@ -451,7 +485,11 @@ export default function App() {
     return (
       <LoginView
         onLoginGoogle={handleLoginGoogleFirebase}
-        onContinueAsGuest={() => setGuestMode(true)}
+        onLoginLocal={(localDb, email) => {
+          setDb(localDb);
+          setLocalGuestEmail(email);
+          setGuestMode(true);
+        }}
         loadingSession={loading || firebaseLoading}
       />
     );
@@ -535,15 +573,7 @@ export default function App() {
       <aside className="w-64 border-r border-white/10 bg-[#111111] flex flex-col justify-between shrink-0" id="main-sidebar">
         <div className="p-6 space-y-8">
           {/* Logo Brand */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-indigo-900/20">
-              F
-            </div>
-            <div>
-              <h1 className="text-base font-display font-bold text-white tracking-tight leading-none">FinanceAI</h1>
-              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block mt-1">Personal Architect</span>
-            </div>
-          </div>
+          <FinanceAILogo size="sm" />
 
           {/* Nav List */}
           <nav className="space-y-1.5">
@@ -627,7 +657,7 @@ export default function App() {
 
             <button
               id="topbar-logout-btn"
-              onClick={firebaseUser ? handleLogoutFirebase : () => setGuestMode(false)}
+              onClick={firebaseUser ? handleLogoutFirebase : handleLogoutLocal}
               className="flex items-center gap-1.5 px-3 py-1 bg-[#1a1012] hover:bg-[#2c141a] border border-rose-500/15 text-rose-400 text-xs font-semibold rounded-full transition cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />

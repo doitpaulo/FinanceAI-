@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -71,13 +71,29 @@ async function testConnection() {
 }
 testConnection();
 
-// Sign In with Google popup handler
+// Sign In with Google popup handler with Redirect fallback
 export async function signInWithGoogle() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro ao autenticar com Google Firebase:", error);
+    // If popup is blocked or closed, fallback to redirect
+    if (
+      error?.code === 'auth/popup-blocked' || 
+      error?.code === 'auth/popup-closed-by-user' || 
+      error?.code === 'auth/cancelled-popup-request' ||
+      error?.message?.includes('popup')
+    ) {
+      console.log("Tentando entrar via redirecionamento (signInWithRedirect)...");
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        return null;
+      } catch (redirectError) {
+        console.error("Erro ao redirecionar para login Google:", redirectError);
+        throw redirectError;
+      }
+    }
     throw error;
   }
 }
