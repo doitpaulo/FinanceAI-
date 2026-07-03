@@ -84,24 +84,25 @@ export default function App() {
                 darkMode: true,
               },
               accounts: [
-                { id: "acc-1", name: "Conta Corrente", bankName: "Banco Digital", type: "checking", balance: 1500.00, isActive: true },
-                { id: "acc-2", name: "Reserva de Emergência", bankName: "Tesouro Selic", type: "savings", balance: 5000.00, isActive: true }
+                { id: "acc-1", name: "Conta Corrente", bankName: "Banco Digital", type: "checking", balance: 0, isActive: true },
+                { id: "acc-2", name: "Reserva Financeira", bankName: "Investimentos", type: "savings", balance: 0, isActive: true }
               ],
               cards: [
-                { id: "card-1", name: "Cartão de Crédito", limit: 3000, dueDate: 10, closingDay: 3, currentInvoice: 0, availableLimit: 3000 }
+                { id: "card-1", name: "Cartão de Crédito", limit: 0, dueDate: 10, closingDay: 3, currentInvoice: 0, availableLimit: 0 }
               ],
               incomeSources: [
-                { id: "inc-1", name: "Renda Mensal", type: "CLT", frequency: "monthly", expectedValue: 3000.00, nextDate: `${currentYear}-07-05` }
+                { id: "inc-1", name: "Renda Mensal", type: "CLT", frequency: "monthly", expectedValue: 0, nextDate: `${currentYear}-07-05` }
               ],
               expenses: [
-                { id: "exp-1", name: "Moradia", category: "Moradia", amount: 1000.00, frequency: "monthly", dueDate: `${currentYear}-07-10`, isFixed: true },
-                { id: "exp-2", name: "Internet & Serviços", category: "Serviços", amount: 150.00, frequency: "monthly", dueDate: `${currentYear}-07-15`, isFixed: true }
+                { id: "exp-1", name: "Moradia", category: "Moradia", amount: 0, frequency: "monthly", dueDate: `${currentYear}-07-10`, isFixed: true },
+                { id: "exp-2", name: "Internet & Serviços", category: "Serviços", amount: 0, frequency: "monthly", dueDate: `${currentYear}-07-15`, isFixed: true },
+                { id: "exp-3", name: "Lazer & Outros", category: "Lazer", amount: 0, frequency: "monthly", dueDate: `${currentYear}-07-20`, isFixed: false }
               ],
               transactions: [],
               assets: [],
               liabilities: [],
               goals: [
-                { id: "goal-1", name: "Reserva de Emergência de 6 meses", targetValue: 9000.00, currentValue: 5000.00, deadline: `${currentYear}-12-31`, priority: "high", status: "active" }
+                { id: "goal-1", name: "Reserva de Emergência de 6 meses", targetValue: 0, currentValue: 0, deadline: `${currentYear}-12-31`, priority: "high", status: "active" }
               ],
               cashFlow: [],
               calendar: [],
@@ -215,8 +216,8 @@ export default function App() {
     // Dynamic accounts balance setting
     const updatedAccounts = db.accounts.map(acc => {
       if (acc.id === "acc-1") {
-        // Checking Account Liquidity: 30% of monthly income, minimum 500
-        return { ...acc, balance: Math.max(500, Math.round(onboardingData.monthlyIncome * 0.3)) };
+        // Checking Account starts clean at 0
+        return { ...acc, balance: 0 };
       }
       if (acc.id === "acc-2") {
         // Savings/Emergency: direct input of savings
@@ -250,49 +251,19 @@ export default function App() {
     // Dynamic goals adaptation
     const updatedGoals = db.goals.map(goal => {
       if (goal.id === "goal-1") {
-        // Emergency reserve (6 months of their estimated fixed costs)
+        // Emergency reserve (6 months of their estimated fixed costs) or their custom goal
         return { 
           ...goal, 
+          name: onboardingData.financialGoal || "Reserva de Emergência de 6 meses",
           currentValue: onboardingData.currentSavings,
           targetValue: onboardingData.monthlyExpenses * 6
-        };
-      }
-      if (goal.id === "goal-2" && onboardingData.financialGoal) {
-        // Change the major target to their custom goal
-        return {
-          ...goal,
-          name: onboardingData.financialGoal,
-          currentValue: Math.round(onboardingData.currentSavings * 0.2) // Assume 20% of current savings goes to this dream
         };
       }
       return goal;
     });
 
-    // Dynamic initial transaction to seed history correctly
-    const currentYear = new Date().getFullYear();
-    const currentMonthStr = String(new Date().getMonth() + 1).padStart(2, "0");
-    const updatedTransactions = [
-      {
-        id: "tx-init-1",
-        type: "income" as const,
-        amount: onboardingData.monthlyIncome,
-        date: `${currentYear}-${currentMonthStr}-01`,
-        category: "Salário",
-        accountId: "acc-1",
-        description: "Salário / Receita Inicial Configurada",
-        isRecurring: true
-      },
-      {
-        id: "tx-init-2",
-        type: "expense" as const,
-        amount: expHousing,
-        date: `${currentYear}-${currentMonthStr}-05`,
-        category: "Moradia",
-        accountId: "acc-1",
-        description: "Despesa Moradia Estimada",
-        isRecurring: true
-      }
-    ];
+    // Clean start: no simulated mock transactions in the database
+    const updatedTransactions: any[] = [];
 
     const updated = {
       ...db,

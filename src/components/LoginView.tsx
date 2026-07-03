@@ -56,20 +56,21 @@ export default function LoginView({ onLoginGoogle, onLoginLocal, loadingSession 
         { id: "acc-2", name: "Reserva Financeira", bankName: "Investimentos", type: "savings", balance: 0, isActive: true }
       ],
       cards: [
-        { id: "card-1", name: "Meu Cartão", limit: 2000, dueDate: 10, closingDay: 3, currentInvoice: 0, availableLimit: 2000 }
+        { id: "card-1", name: "Meu Cartão", limit: 0, dueDate: 10, closingDay: 3, currentInvoice: 0, availableLimit: 0 }
       ],
       incomeSources: [
-        { id: "inc-1", name: "Salário / Receitas", type: "CLT", frequency: "monthly", expectedValue: 3000, nextDate: `${currentYear}-07-05` }
+        { id: "inc-1", name: "Salário / Receitas", type: "CLT", frequency: "monthly", expectedValue: 0, nextDate: `${currentYear}-07-05` }
       ],
       expenses: [
-        { id: "exp-1", name: "Custos de Moradia", category: "Moradia", amount: 1000, frequency: "monthly", dueDate: `${currentYear}-07-10`, isFixed: true },
-        { id: "exp-2", name: "Contas Gerais", category: "Serviços", amount: 200, frequency: "monthly", dueDate: `${currentYear}-07-15`, isFixed: true }
+        { id: "exp-1", name: "Custos de Moradia", category: "Moradia", amount: 0, frequency: "monthly", dueDate: `${currentYear}-07-10`, isFixed: true },
+        { id: "exp-2", name: "Contas Gerais", category: "Serviços", amount: 0, frequency: "monthly", dueDate: `${currentYear}-07-15`, isFixed: true },
+        { id: "exp-3", name: "Lazer & Outros", category: "Lazer", amount: 0, frequency: "monthly", dueDate: `${currentYear}-07-20`, isFixed: false }
       ],
       transactions: [],
       assets: [],
       liabilities: [],
       goals: [
-        { id: "goal-1", name: "Fundo de Reserva", targetValue: 5000, currentValue: 0, deadline: `${currentYear}-12-31`, priority: "high", status: "active" }
+        { id: "goal-1", name: "Fundo de Reserva", targetValue: 0, currentValue: 0, deadline: `${currentYear}-12-31`, priority: "high", status: "active" }
       ],
       cashFlow: [],
       calendar: [],

@@ -225,11 +225,15 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                     : "border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white"
                 }`}
               >
-                <div className="font-bold text-sm capitalize">{profile}</div>
+                <div className="font-bold text-sm">
+                  {profile === "conservador" && "Conservador"}
+                  {profile === "moderado" && "Moderado"}
+                  {profile === "agressivo" && "Arrojado"}
+                </div>
                 <div className="text-xs text-slate-500 mt-1 font-medium">
                   {profile === "conservador" && "Foco absoluto em segurança, liquidez diária e preservação de capital."}
                   {profile === "moderado" && "Equilíbrio entre segurança e crescimento, aceitando pequenas flutuações por melhor retorno."}
-                  {profile === "agressivo" && "Busca de retorno de longo prazo focado em ações, criptos e patrimônio de risco."}
+                  {profile === "agressivo" && "Busca de retorno de longo prazo focado em ações, criptomoedas e patrimônio de risco."}
                 </div>
               </button>
             ))}
