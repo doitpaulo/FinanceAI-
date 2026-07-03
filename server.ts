@@ -399,6 +399,33 @@ app.post("/api/db/transaction", async (req, res) => {
   res.json({ success: true, db });
 });
 
+// Endpoint para depuração e diagnóstico de configuração das chaves Microsoft
+app.get("/api/auth/debug", (req, res) => {
+  const clientId = process.env.MICROSOFT_CLIENT_ID || "";
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET || "";
+  const redirectUri = `${getAppUrl(req)}/auth/callback`;
+
+  const isClientIdOk = clientId && clientId !== "PLACEHOLDER_CLIENT_ID" && clientId.trim() !== "";
+  const isClientSecretOk = clientSecret && clientSecret !== "PLACEHOLDER_CLIENT_SECRET" && clientSecret.trim() !== "";
+
+  res.json({
+    status: (isClientIdOk && isClientSecretOk) ? "configurado" : "incompleto",
+    microsoft_client_id_configured: !!isClientIdOk,
+    microsoft_client_id_preview: isClientIdOk 
+      ? `${clientId.substring(0, 5)}...${clientId.substring(clientId.length - 5)}`
+      : "Não configurado ou inválido",
+    microsoft_client_secret_configured: !!isClientSecretOk,
+    microsoft_client_secret_preview: isClientSecretOk
+      ? `${clientSecret.substring(0, 3)}...${clientSecret.substring(clientSecret.length - 3)}`
+      : "Não configurado ou inválido",
+    calculated_redirect_uri: redirectUri,
+    tips: {
+      azure_redirect_uri_requirement: "No portal Azure Active Directory, em Autenticação, certifique-se de adicionar como URI de Redirecionamento da plataforma Web o valor exato exbido em 'calculated_redirect_uri'.",
+      env_variables_location: "As variáveis MICROSOFT_CLIENT_ID e MICROSOFT_CLIENT_SECRET devem ser preenchidas nas Configurações de Ambiente (Environment Variables) do seu projeto na Vercel e o projeto deve ser redeployado."
+    }
+  });
+});
+
 // Endpoint to handle Microsoft OAuth URL generation
 app.get("/api/auth/url", (req, res) => {
   const redirectUri = `${getAppUrl(req)}/auth/callback`;
