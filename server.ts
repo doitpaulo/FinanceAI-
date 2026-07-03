@@ -195,7 +195,7 @@ async function getValidAccessToken(req: express.Request, res: express.Response):
           refresh_token: tokens.refreshToken,
           grant_type: "refresh_token",
           redirect_uri: redirectUri,
-          scope: "offline_access User.Read Files.ReadWrite"
+          scope: "openid profile email offline_access User.Read Files.ReadWrite"
         })
       });
 
@@ -402,9 +402,17 @@ app.post("/api/db/transaction", async (req, res) => {
 // Endpoint to handle Microsoft OAuth URL generation
 app.get("/api/auth/url", (req, res) => {
   const redirectUri = `${getAppUrl(req)}/auth/callback`;
-  const clientId = process.env.MICROSOFT_CLIENT_ID || "PLACEHOLDER_CLIENT_ID";
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  
+  if (!clientId || clientId === "PLACEHOLDER_CLIENT_ID" || clientId.trim() === "") {
+    res.status(400).json({
+      error: "MICROSOFT_CLIENT_ID não está configurado. Configure as variáveis de ambiente MICROSOFT_CLIENT_ID e MICROSOFT_CLIENT_SECRET no painel da sua hospedagem (Vercel, AI Studio, etc.) antes de conectar."
+    });
+    return;
+  }
+  
   const tenant = "common";
-  const scopes = "offline_access User.Read Files.ReadWrite";
+  const scopes = "openid profile email offline_access User.Read Files.ReadWrite";
 
   const authUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?` +
     new URLSearchParams({
@@ -442,7 +450,7 @@ app.get(["/auth/callback", "/auth/callback/"], async (req, res) => {
         code: code as string,
         redirect_uri: redirectUri,
         grant_type: "authorization_code",
-        scope: "offline_access User.Read Files.ReadWrite"
+        scope: "openid profile email offline_access User.Read Files.ReadWrite"
       })
     });
 

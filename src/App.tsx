@@ -82,7 +82,10 @@ export default function App() {
   const handleConnectMicrosoft = async () => {
     try {
       const res = await fetch("/api/auth/url");
-      if (!res.ok) throw new Error("Erro ao obter link de autorização.");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro ao obter link de autorização.");
+      }
       const { url } = await res.json();
       
       const width = 600;
