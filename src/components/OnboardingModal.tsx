@@ -253,7 +253,7 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="w-full max-w-lg bg-[#111111] border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8 overflow-hidden relative"
+        className="w-full max-w-lg bg-[#111111] border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8 max-h-[95vh] overflow-y-auto relative"
       >
         {/* Glow Effects */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />

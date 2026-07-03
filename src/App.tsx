@@ -529,7 +529,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-slate-200 flex">
+    <div className="min-h-screen bg-[#050505] text-slate-200 flex flex-col md:flex-row pb-16 md:pb-0">
       {/* Dynamic onboarding trigger */}
       <AnimatePresence>
         {!db.profile.onboardingCompleted && (
@@ -540,8 +540,8 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Persistent Left Sidebar Navigation */}
-      <aside className="w-64 border-r border-white/10 bg-[#111111] flex flex-col justify-between shrink-0" id="main-sidebar">
+      {/* Persistent Left Sidebar Navigation - Hidden on mobile */}
+      <aside className="hidden md:flex w-64 border-r border-white/10 bg-[#111111] flex-col justify-between shrink-0" id="main-sidebar">
         <div className="p-6 space-y-8">
           {/* Logo Brand */}
           <FinanceAILogo size="sm" />
@@ -560,7 +560,7 @@ export default function App() {
                 id={`sidebar-nav-${tab.id}`}
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition cursor-pointer ${
                   activeTab === tab.id
                     ? "bg-indigo-600/10 text-indigo-400 font-bold border-l-2 border-indigo-500"
                     : "text-slate-400 hover:text-white hover:bg-white/5"
@@ -599,23 +599,27 @@ export default function App() {
       {/* Main Workspace Frame */}
       <main className="flex-1 flex flex-col min-w-0" id="main-content-area">
         {/* Top bar header */}
-        <header className="h-16 border-b border-white/10 bg-[#111111]/80 flex items-center justify-between px-8">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-mono text-slate-500">Usuário:</span>
-            <span className="text-sm font-semibold text-white bg-[#050505] px-3 py-1 rounded-full border border-white/10">
-              {db.profile.name} ({db.profile.email})
+        <header className="h-16 border-b border-white/10 bg-[#111111]/80 flex items-center justify-between px-4 md:px-8 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Show tiny logo icon on mobile top bar since sidebar is hidden */}
+            <div className="md:hidden shrink-0">
+              <FinanceAILogo size="sm" iconOnly />
+            </div>
+            <span className="text-xs font-mono text-slate-500 hidden sm:inline">Usuário:</span>
+            <span className="text-xs md:text-sm font-semibold text-white bg-[#050505] px-2.5 py-1 rounded-full border border-white/10 truncate max-w-[150px] sm:max-w-none">
+              {db.profile.name} <span className="hidden md:inline">({db.profile.email})</span>
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
             {firebaseUser && (
-              <span className="text-xs flex items-center gap-1.5 font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-full">
+              <span className="text-[10px] md:text-xs flex items-center gap-1.5 font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 md:px-3 py-1 rounded-full">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                Firebase Ativo
+                <span className="hidden sm:inline">Firebase Ativo</span>
               </span>
             )}
 
-            <span className={`text-xs flex items-center gap-1.5 font-semibold bg-white/5 px-3 py-1 rounded-full ${
+            <span className={`text-[10px] md:text-xs flex items-center gap-1.5 font-semibold bg-white/5 px-2 md:px-3 py-1 rounded-full ${
               firebaseUser 
                 ? "text-amber-400 bg-amber-500/10 border border-amber-500/20" 
                 : "text-slate-400 border border-white/10"
@@ -623,22 +627,24 @@ export default function App() {
               <span className={`h-1.5 w-1.5 rounded-full ${
                 firebaseUser ? "bg-amber-500 animate-pulse" : "bg-slate-500"
               }`} />
-              {firebaseUser ? "Google Logado" : "Sessão Local"}
+              <span className="hidden sm:inline">{firebaseUser ? "Google Logado" : "Sessão Local"}</span>
+              {!firebaseUser && <span className="sm:hidden">Local</span>}
+              {firebaseUser && <span className="sm:hidden">Nuvem</span>}
             </span>
 
             <button
               id="topbar-logout-btn"
               onClick={firebaseUser ? handleLogoutFirebase : handleLogoutLocal}
-              className="flex items-center gap-1.5 px-3 py-1 bg-[#1a1012] hover:bg-[#2c141a] border border-rose-500/15 text-rose-400 text-xs font-semibold rounded-full transition cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 bg-[#1a1012] hover:bg-[#2c141a] border border-rose-500/15 text-rose-400 text-[10px] md:text-xs font-semibold rounded-full transition cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              Sair
+              <LogOut className="w-3 h-3 md:w-3.5 md:h-3.5" />
+              <span>Sair</span>
             </button>
           </div>
         </header>
 
         {/* View Section */}
-        <div className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+        <div className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -694,6 +700,31 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#111111]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-around px-2 z-40 md:hidden">
+        {[
+          { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
+          { id: "fluxo", label: "Fluxo", icon: <TrendingUp className="w-5 h-5" /> },
+          { id: "patrimonio", label: "Patrimônio", icon: <Briefcase className="w-5 h-5" /> },
+          { id: "metas", label: "Metas", icon: <Award className="w-5 h-5" /> },
+          { id: "coach", label: "IA Coach", icon: <Bot className="w-5 h-5" /> },
+          { id: "settings", label: "Ajustes", icon: <Settings className="w-5 h-5" /> }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition cursor-pointer ${
+              activeTab === tab.id
+                ? "text-indigo-400 font-bold"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            {tab.icon}
+            <span className="text-[10px] mt-1 font-semibold">{tab.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
