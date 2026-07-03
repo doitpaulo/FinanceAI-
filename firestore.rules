@@ -13,7 +13,7 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn();
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
 
     function isOwner(userId) {
@@ -26,14 +26,39 @@ service cloud.firestore {
 
     // Comprehensive validation of the UserDatabase schema shape
     function isValidUserDatabase(data, userId) {
-      return data.keys().hasAll(['profile', 'settings'])
+      return data.keys().hasAll([
+        'profile', 'settings', 'accounts', 'cards', 'incomeSources', 
+        'expenses', 'transactions', 'assets', 'liabilities', 'goals', 
+        'cashFlow', 'calendar', 'timeline', 'events', 'aiInsights'
+      ])
+        && data.keys().size() == 15
         && data.profile is map
         && data.profile.get('userId', '') == userId
         && data.profile.get('name', '') is string
         && data.profile.get('name', '').size() <= 200
         && data.settings is map
         && data.settings.get('currency', 'BRL') is string
-        && data.settings.get('currency', 'BRL').size() <= 10;
+        && data.settings.get('currency', 'BRL').size() <= 10
+        && data.accounts is list
+        && data.cards is list
+        && data.incomeSources is list
+        && data.expenses is list
+        && data.transactions is list
+        && data.assets is list
+        && data.liabilities is list
+        && data.goals is list
+        && data.cashFlow is list
+        && data.calendar is list
+        && data.timeline is list
+        && data.events is list
+        && data.aiInsights is list
+        && (data.accounts.size() == 0 || data.accounts[0] is map)
+        && (data.cards.size() == 0 || data.cards[0] is map)
+        && (data.expenses.size() == 0 || data.expenses[0] is map)
+        && (data.transactions.size() == 0 || data.transactions[0] is map)
+        && (data.assets.size() == 0 || data.assets[0] is map)
+        && (data.liabilities.size() == 0 || data.liabilities[0] is map)
+        && (data.goals.size() == 0 || data.goals[0] is map);
     }
 
     // User Financial Databases Match Block

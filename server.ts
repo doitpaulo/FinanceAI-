@@ -333,8 +333,28 @@ app.get("/api/db", async (req, res) => {
   res.json(db);
 });
 
+function isValidDatabasePayload(data: any): boolean {
+  if (!data || typeof data !== "object") return false;
+  const requiredKeys = [
+    'profile', 'settings', 'accounts', 'cards', 'incomeSources', 
+    'expenses', 'transactions', 'assets', 'liabilities', 'goals'
+  ];
+  for (const key of requiredKeys) {
+    if (!(key in data)) return false;
+  }
+  if (typeof data.profile !== "object" || typeof data.settings !== "object") return false;
+  if (!Array.isArray(data.accounts) || !Array.isArray(data.cards) || !Array.isArray(data.transactions) || !Array.isArray(data.goals)) return false;
+  return true;
+}
+
 app.post("/api/db", async (req, res) => {
   const newData = req.body as ExcelDatabase;
+  
+  if (!isValidDatabasePayload(newData)) {
+    res.status(400).json({ error: "Estrutura do banco de dados inválida ou incompleta. Gravação rejeitada." });
+    return;
+  }
+
   const token = await getValidAccessToken(req, res);
 
   if (token) {
@@ -347,6 +367,22 @@ app.post("/api/db", async (req, res) => {
 
   writeDatabase(newData);
   res.json({ success: true, message: "Banco de dados Excel atualizado com sucesso localmente." });
+});
+
+app.post("/api/db/reset", async (req, res) => {
+  const seed = defaultSeedData();
+  const token = await getValidAccessToken(req, res);
+
+  if (token) {
+    const success = await writeToOneDrive(token, seed);
+    if (success) {
+      res.json({ success: true, db: seed, message: "Banco de dados restaurado para padrão no OneDrive." });
+      return;
+    }
+  }
+
+  writeDatabase(seed);
+  res.json({ success: true, db: seed, message: "Banco de dados restaurado para padrão localmente." });
 });
 
 // Endpoint to handle specific transactions creation
@@ -637,7 +673,7 @@ app.post("/api/auth/logout", (req, res) => {
 
 // Gemini AI Insights Proxy Endpoint
 app.post("/api/ai/coach", async (req, res) => {
-  const { message, history } = req.body;
+  const { message, history, maskData } = req.body;
   
   let db: ExcelDatabase | null = null;
   const token = await getValidAccessToken(req, res);
@@ -653,22 +689,46 @@ app.post("/api/ai/coach", async (req, res) => {
 
   const aiClient = getGeminiAI();
 
-  // Create dynamic structural context to feed into Gemini so it gives extremely accurate, non-generic advice
-  const accountsSummary = db.accounts.map(a => `${a.name} (${a.bankName}): R$ ${a.balance.toFixed(2)}`).join(", ");
-  const cardsSummary = db.cards.map(c => `${c.name}: Fatura Atual R$ ${c.currentInvoice.toFixed(2)}, Limite Disponível R$ ${c.availableLimit.toFixed(2)}`).join(", ");
-  const activeGoals = db.goals.filter(g => g.status === "active").map(g => `${g.name}: Alvo R$ ${g.targetValue.toFixed(2)}, Atual R$ ${g.currentValue.toFixed(2)}, Prazo ${g.deadline}`).join("; ");
-  const recentTransactions = db.transactions.slice(-5).map(t => `${t.date} - ${t.type === "income" ? "Receita" : "Despesa"} [${t.category}]: R$ ${t.amount.toFixed(2)} (${t.description})`).join("\n");
+  // Helper to mask values to preserve privacy while keeping enough order of magnitude context for meaningful coaching
+  const maskValue = (val: number, active: boolean): string => {
+    if (!active) return `R$ ${val.toFixed(2)}`;
+    if (val === 0) return "R$ 0,00";
+    if (Math.abs(val) < 100) return "~R$ 50,00";
+    // Round to nearest hundred for privacy obfuscation
+    const rounded = Math.round(val / 100) * 100;
+    return `~R$ ${rounded.toLocaleString("pt-BR")}`;
+  };
+
+  // Data Minimization (Cap 10/11) - Summarize totals instead of leaking exact account/card details
+  const checkingTotal = db.accounts.filter(a => a.type === "checking" && a.isActive).reduce((sum, a) => sum + a.balance, 0);
+  const savingsTotal = db.accounts.filter(a => a.type === "savings" && a.isActive).reduce((sum, a) => sum + a.balance, 0);
+  const totalCardsInvoice = db.cards.reduce((sum, c) => sum + c.currentInvoice, 0);
+
+  const accountsSummary = `Total em Contas Correntes: ${maskValue(checkingTotal, !!maskData)}; Total Guardado/Reservas: ${maskValue(savingsTotal, !!maskData)}`;
+  const cardsSummary = `Total Faturas Cartões de Crédito: ${maskValue(totalCardsInvoice, !!maskData)}`;
+  
+  // Omit exact goal IDs, only send name and progress metrics
+  const activeGoals = db.goals
+    .filter(g => g.status === "active")
+    .map(g => `${g.name}: Alvo ${maskValue(g.targetValue, !!maskData)}, Guardado ${maskValue(g.currentValue, !!maskData)}, Prazo ${g.deadline}`)
+    .join("; ");
+
+  // Omit descriptions/names of individual transactions to prevent leaking specific merchants, only category and amount
+  const recentTransactions = db.transactions
+    .slice(-5)
+    .map(t => `${t.date} - ${t.type === "income" ? "Entrada" : "Saída"} [Categoria: ${t.category}]: ${maskValue(t.amount, !!maskData)}`)
+    .join("\n");
 
   const systemInstruction = `
 Você é o consultor de IA financeira pessoal do FinanceAI, um Sistema Operacional da Vida Financeira empático, analítico e não julgador.
 Seu objetivo é ajudar o usuário a entender seus números e sugerir melhorias práticas com base nos dados dele.
 
-Aqui está o contexto financeiro REAL e atualizado do usuário:
+Aqui está o contexto financeiro REAL e MINIMIZADO do usuário (as contas reais, IDs e nomes de estabelecimentos de transações foram omitidos para sua privacidade):
 - Nome: ${db.profile.name} (Perfil ${db.profile.incomeType}, Frequência de Recebimento: ${db.profile.payFrequency}, Risco: ${db.profile.riskProfile})
 - Contas: ${accountsSummary}
 - Cartões: ${cardsSummary}
 - Metas Ativas: ${activeGoals}
-- Transações Recentes:
+- Transações Recentes (Omitindo descrições):
 ${recentTransactions}
 
 Regras importantes de conversação:
@@ -676,7 +736,7 @@ Regras importantes de conversação:
 2. Seja empático e encorajador. Mostre que ele está no controle.
 3. Use a moeda corrente Real (R$).
 4. Responda em Português do Brasil com excelente formatação em Markdown (negritos, listas e espaçamentos limpos).
-5. Se for perguntado se pode gastar determinado valor (ex: "Posso gastar R$200 hoje?"), analise o saldo atual das contas checking (${db.accounts.find(a => a.type === "checking")?.balance || 0} BRL) e avise o impacto na fatura do cartão ou nas metas de forma precisa e empática.
+5. Se for perguntado se pode gastar determinado valor (ex: "Posso gastar R$200 hoje?"), analise o saldo atual das contas correntes (${maskValue(checkingTotal, !!maskData)}) e avise o impacto na fatura do cartão ou nas metas de forma precisa e empática.
   `;
 
   if (!aiClient) {
@@ -705,15 +765,21 @@ Como posso ajudar você a planejar suas metas hoje?`;
   }
 
   try {
-    const response = await aiClient.models.generateContent({
+    const mappedHistory = (history || []).map((msg: any) => ({
+      role: msg.sender === "user" ? "user" : "model",
+      parts: [{ text: msg.text }]
+    }));
+
+    const chat = aiClient.chats.create({
       model: "gemini-3.5-flash",
-      contents: message,
       config: {
         systemInstruction,
         temperature: 0.7,
-      }
+      },
+      history: mappedHistory
     });
 
+    const response = await chat.sendMessage({ message });
     res.json({ text: response.text, model: "gemini-3.5-flash" });
   } catch (err: any) {
     console.error("Erro na chamada do Gemini API:", err);

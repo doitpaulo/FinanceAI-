@@ -27,10 +27,10 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
   const [financialGoal, setFinancialGoal] = useState("");
   const [riskProfile, setRiskProfile] = useState<Profile["riskProfile"]>("moderado");
   
-  // Real numbers for adaptation
-  const [monthlyIncome, setMonthlyIncome] = useState<number>(6500);
-  const [currentSavings, setCurrentSavings] = useState<number>(12000);
-  const [monthlyExpenses, setMonthlyExpenses] = useState<number>(1500);
+  // Real numbers for adaptation - starting at 0 for a truly clean experience
+  const [monthlyIncome, setMonthlyIncome] = useState<number | "">(0);
+  const [currentSavings, setCurrentSavings] = useState<number | "">(0);
+  const [monthlyExpenses, setMonthlyExpenses] = useState<number | "">(0);
 
   const handleNext = () => {
     if (step < 5) {
@@ -52,7 +52,7 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
   const stepsContent = [
     {
       title: "Boas-vindas ao FinanceAI",
-      description: "Vamos configurar seu Sistema Operacional Financeiro pessoal. Para começar, nos diga seu nome.",
+      description: "Vamos configurar seu organizador financeiro pessoal de forma simples. Para começar, digite seu nome.",
       icon: <User className="w-12 h-12 text-indigo-400" />,
       component: (
         <div className="space-y-4 text-left">
@@ -69,13 +69,13 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
       )
     },
     {
-      title: "Origem e Frequência de Renda",
-      description: "Para criarmos projeções de fluxo de caixa, precisamos entender como e quando você recebe.",
+      title: "De onde vem seu dinheiro?",
+      description: "Precisamos entender como e quando você recebe seu dinheiro para organizar suas contas.",
       icon: <DollarSign className="w-12 h-12 text-indigo-400" />,
       component: (
         <div className="space-y-6 text-left">
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-slate-400">Qual é o seu tipo de receita?</label>
+            <label className="block text-sm font-bold text-slate-400">Como você recebe seu dinheiro?</label>
             <div className="grid grid-cols-3 gap-3">
               {(["CLT", "variavel", "misto"] as const).map((type) => (
                 <button
@@ -89,7 +89,7 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                       : "border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white"
                   }`}
                 >
-                  {type === "CLT" ? "CLT / Fixo" : type === "variavel" ? "Variável" : "Misto"}
+                  {type === "CLT" ? "Salário Fixo" : type === "variavel" ? "Renda Variável" : "Misto (Fixo + Extra)"}
                 </button>
               ))}
             </div>
@@ -110,7 +110,7 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                       : "border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white"
                   }`}
                 >
-                  {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                  {freq === "mensal" ? "Todo mês" : freq === "semanal" ? "Toda semana" : freq === "diario" ? "Todo dia" : "Varia bastante"}
                 </button>
               ))}
             </div>
@@ -119,13 +119,13 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
       )
     },
     {
-      title: "Sua Realidade Financeira",
-      description: "Insira seus dados financeiros básicos para criarmos uma planilha 100% personalizada para sua vida real.",
+      title: "Seus Valores Atuais",
+      description: "Insira seus dados financeiros para criarmos seu painel. Deixe com zero o que você ainda não tiver.",
       icon: <Calculator className="w-12 h-12 text-indigo-400" />,
       component: (
         <div className="space-y-4 text-left">
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">1. Renda Mensal Líquida Média (R$)</label>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">1. Quanto você ganha por mês em média?</label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-500 text-sm font-bold">R$</span>
               <input
@@ -133,15 +133,16 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                 type="number"
                 min="0"
                 className="w-full pl-10 pr-4 py-2.5 bg-[#050505] border border-white/10 rounded-xl focus:border-indigo-500 outline-none text-white font-sans font-semibold transition"
-                value={monthlyIncome}
-                onChange={(e) => setMonthlyIncome(Math.max(0, parseFloat(e.target.value) || 0))}
+                value={monthlyIncome === 0 ? "" : monthlyIncome}
+                placeholder="0.00"
+                onChange={(e) => setMonthlyIncome(e.target.value === "" ? "" : Math.max(0, parseFloat(e.target.value) || 0))}
               />
             </div>
-            <p className="text-[10px] text-slate-500">Insira seu salário líquido ou média de faturamento mensal.</p>
+            <p className="text-[10px] text-slate-500">Seu salário limpo na conta ou faturamento médio mensal.</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">2. Quanto já tem Guardado/Investido (R$)</label>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">2. Quanto dinheiro você tem guardado hoje?</label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-500 text-sm font-bold">R$</span>
               <input
@@ -149,15 +150,16 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                 type="number"
                 min="0"
                 className="w-full pl-10 pr-4 py-2.5 bg-[#050505] border border-white/10 rounded-xl focus:border-indigo-500 outline-none text-white font-sans font-semibold transition"
-                value={currentSavings}
-                onChange={(e) => setCurrentSavings(Math.max(0, parseFloat(e.target.value) || 0))}
+                value={currentSavings === 0 ? "" : currentSavings}
+                placeholder="0.00"
+                onChange={(e) => setCurrentSavings(e.target.value === "" ? "" : Math.max(0, parseFloat(e.target.value) || 0))}
               />
             </div>
-            <p className="text-[10px] text-slate-500">Seu saldo atual somando contas, poupança e investimentos.</p>
+            <p className="text-[10px] text-slate-500">Soma de saldos em contas, poupanças ou investimentos.</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">3. Despesas Fixas Mensais Estimadas (R$)</label>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">3. Quanto você gasta por mês em média?</label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-500 text-sm font-bold">R$</span>
               <input
@@ -165,32 +167,40 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                 type="number"
                 min="0"
                 className="w-full pl-10 pr-4 py-2.5 bg-[#050505] border border-white/10 rounded-xl focus:border-indigo-500 outline-none text-white font-sans font-semibold transition"
-                value={monthlyExpenses}
-                onChange={(e) => setMonthlyExpenses(Math.max(0, parseFloat(e.target.value) || 0))}
+                value={monthlyExpenses === 0 ? "" : monthlyExpenses}
+                placeholder="0.00"
+                onChange={(e) => setMonthlyExpenses(e.target.value === "" ? "" : Math.max(0, parseFloat(e.target.value) || 0))}
               />
             </div>
-            <p className="text-[10px] text-slate-500">Aluguel, contas fixas, assinaturas, compras de rotina básicas.</p>
+            <p className="text-[10px] text-slate-500">Suas contas de água, luz, aluguel, mercado, lazer, etc.</p>
           </div>
         </div>
       )
     },
     {
-      title: "Objetivo Principal",
-      description: "Qual é o seu maior foco ou sonho financeiro no momento?",
+      title: "Qual é o seu maior sonho ou meta?",
+      description: "Definir um foco ajuda você a economizar com mais propósito e motivação.",
       icon: <Goal className="w-12 h-12 text-indigo-400" />,
       component: (
         <div className="space-y-4 text-left">
-          <label className="block text-sm font-bold text-slate-400">Seu objetivo de vida financeiro</label>
+          <label className="block text-sm font-bold text-slate-400">Escreva o seu sonho ou meta principal:</label>
           <input
             id="onboarding-goal-input"
             type="text"
             className="w-full px-4 py-3 bg-[#050505] border border-white/10 rounded-xl focus:border-indigo-500 outline-none text-white font-sans transition"
-            placeholder="Ex: Reserva de Emergência ou Comprar Apartamento"
+            placeholder="Ex: Minha Reserva de Emergência ou Viagem de Férias"
             value={financialGoal}
             onChange={(e) => setFinancialGoal(e.target.value)}
           />
           <div className="grid grid-cols-2 gap-2 mt-2">
-            {["Formar Reserva de Emergência", "Comprar um Apartamento", "Quitar minhas Dívidas", "Iniciar nos Investimentos"].map((suggestion) => (
+            {[
+              "Reserva de R$ 500 para emergências",
+              "Limpar meu nome / Quitar dívidas",
+              "Pagar o aluguel em dia",
+              "Fazer compras do mês à vista",
+              "Consertar moto ou carro de trabalho",
+              "Comprar material escolar dos filhos"
+            ].map((suggestion) => (
               <button
                 id={`onboarding-suggest-${suggestion.replace(/\s+/g, '-').toLowerCase()}`}
                 key={suggestion}
@@ -206,12 +216,12 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
       )
     },
     {
-      title: "Perfil de Risco",
-      description: "Como você se comporta em relação a volatilidade e investimentos?",
+      title: "Como prefere guardar seu dinheiro?",
+      description: "Conte para nós seu estilo de poupança para sugerirmos as melhores caixinhas.",
       icon: <ShieldAlert className="w-12 h-12 text-indigo-400" />,
       component: (
         <div className="space-y-4 text-left">
-          <label className="block text-sm font-bold text-slate-400">Escolha o perfil ideal</label>
+          <label className="block text-sm font-bold text-slate-400">Escolha o seu estilo de poupança</label>
           <div className="space-y-3">
             {(["conservador", "moderado", "agressivo"] as const).map((profile) => (
               <button
@@ -226,14 +236,14 @@ export default function OnboardingModal({ onComplete, defaultName = "" }: Onboar
                 }`}
               >
                 <div className="font-bold text-sm">
-                  {profile === "conservador" && "Conservador"}
-                  {profile === "moderado" && "Moderado"}
-                  {profile === "agressivo" && "Arrojado"}
+                  {profile === "conservador" && "Segurança Máxima (Sem risco nenhum)"}
+                  {profile === "moderado" && "Equilibrado (Segurança + Pequena rentabilidade)"}
+                  {profile === "agressivo" && "Foco em Crescimento (Rendimento a longo prazo)"}
                 </div>
                 <div className="text-xs text-slate-500 mt-1 font-medium">
-                  {profile === "conservador" && "Foco absoluto em segurança, liquidez diária e preservação de capital."}
-                  {profile === "moderado" && "Equilíbrio entre segurança e crescimento, aceitando pequenas flutuações por melhor retorno."}
-                  {profile === "agressivo" && "Busca de retorno de longo prazo focado em ações, criptomoedas e patrimônio de risco."}
+                  {profile === "conservador" && "Você quer que seu dinheiro esteja sempre disponível e 100% seguro contra perdas."}
+                  {profile === "moderado" && "Você aceita poupar em opções um pouquinho mais ousadas se render mais que a poupança comum."}
+                  {profile === "agressivo" && "Você busca investir focado no longo prazo, tolerando riscos em busca de mais ganhos."}
                 </div>
               </button>
             ))}

@@ -9,7 +9,7 @@ import {
   Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut, Database
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { ExcelDatabase, Transaction, Asset, Liability, Goal, Profile, Settings as SettingsType } from "./types";
+import { ExcelDatabase, Transaction, Asset, Liability, Goal, Profile, Settings as SettingsType, Expense, Account, Card } from "./types";
 import Dashboard from "./components/Dashboard";
 import FluxoFinanceiro from "./components/FluxoFinanceiro";
 import Patrimonio from "./components/Patrimonio";
@@ -408,6 +408,215 @@ export default function App() {
     await saveDb(updated);
   };
 
+  // 6b. Delete Goal Action
+  const handleDeleteGoal = async (id: string) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      goals: db.goals.filter(g => g.id !== id)
+    };
+    await saveDb(updated);
+  };
+
+  // 6c. Edit Goal Action
+  const handleEditGoal = async (id: string, goalData: Partial<Goal>) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      goals: db.goals.map(g => g.id === id ? { ...g, ...goalData } : g)
+    };
+    await saveDb(updated);
+  };
+
+  // 6d. Edit Transaction Action
+  const handleEditTransaction = async (id: string, txData: Partial<Transaction>) => {
+    if (!db) return;
+    const oldTx = db.transactions.find(t => t.id === id);
+    if (!oldTx) return;
+
+    // Revert old transaction impact on balance
+    let updatedAccounts = db.accounts.map(acc => {
+      if (acc.id === oldTx.accountId) {
+        return {
+          ...acc,
+          balance: oldTx.type === "expense" ? acc.balance + oldTx.amount : acc.balance - oldTx.amount
+        };
+      }
+      return acc;
+    });
+
+    // Apply new transaction impact
+    const finalTx = { ...oldTx, ...txData };
+    updatedAccounts = updatedAccounts.map(acc => {
+      if (acc.id === finalTx.accountId) {
+        return {
+          ...acc,
+          balance: finalTx.type === "expense" ? acc.balance - finalTx.amount : acc.balance + finalTx.amount
+        };
+      }
+      return acc;
+    });
+
+    const updated = {
+      ...db,
+      accounts: updatedAccounts,
+      transactions: db.transactions.map(t => t.id === id ? finalTx : t)
+    };
+    await saveDb(updated);
+  };
+
+  // 6e. Delete Asset Action
+  const handleDeleteAsset = async (id: string) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      assets: db.assets.filter(a => a.id !== id)
+    };
+    await saveDb(updated);
+  };
+
+  // 6f. Edit Asset Action
+  const handleEditAsset = async (id: string, assetData: Partial<Asset>) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      assets: db.assets.map(a => a.id === id ? { ...a, ...assetData } : a)
+    };
+    await saveDb(updated);
+  };
+
+  // 6g. Delete Liability Action
+  const handleDeleteLiability = async (id: string) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      liabilities: db.liabilities.filter(l => l.id !== id)
+    };
+    await saveDb(updated);
+  };
+
+  // 6h. Edit Liability Action
+  const handleEditLiability = async (id: string, liabData: Partial<Liability>) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      liabilities: db.liabilities.map(l => l.id === id ? { ...l, ...liabData } : l)
+    };
+    await saveDb(updated);
+  };
+
+  // 6i. Edit Account Action
+  const handleEditAccount = async (id: string, updatedData: Partial<Account>) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      accounts: db.accounts.map(a => a.id === id ? { ...a, ...updatedData } : a)
+    };
+    await saveDb(updated);
+  };
+
+  // 6j. Edit Card Action
+  const handleEditCard = async (id: string, updatedData: Partial<Card>) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      cards: db.cards.map(c => c.id === id ? { ...c, ...updatedData } : c)
+    };
+    await saveDb(updated);
+  };
+
+  // 6k. Add Custom Bill/Expense Action
+  const handleAddExpense = async (expData: Omit<Expense, "id">) => {
+    if (!db) return;
+    const newExp: Expense = {
+      ...expData,
+      id: "exp-" + Math.random().toString(36).substr(2, 9),
+      paid: false
+    };
+    const updated = {
+      ...db,
+      expenses: [...(db.expenses || []), newExp]
+    };
+    await saveDb(updated);
+  };
+
+  // 6l. Edit Custom Bill/Expense Action
+  const handleEditExpense = async (id: string, expData: Partial<Expense>) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      expenses: (db.expenses || []).map(e => e.id === id ? { ...e, ...expData } : e)
+    };
+    await saveDb(updated);
+  };
+
+  // 6m. Delete Custom Bill/Expense Action
+  const handleDeleteExpense = async (id: string) => {
+    if (!db) return;
+    const updated = {
+      ...db,
+      expenses: (db.expenses || []).filter(e => e.id !== id)
+    };
+    await saveDb(updated);
+  };
+
+  // 6n. Toggle Custom Bill/Expense Paid Action
+  const handleToggleExpensePaid = async (id: string) => {
+    if (!db) return;
+    const exp = (db.expenses || []).find(e => e.id === id);
+    if (!exp) return;
+
+    const newPaidStatus = !exp.paid;
+    
+    let updatedAccounts = [...db.accounts];
+    let updatedTransactions = [...db.transactions];
+
+    if (newPaidStatus) {
+      // Create actual expense transaction automatically
+      const newTx: Transaction = {
+        id: "tx-exp-" + Math.random().toString(36).substr(2, 9),
+        type: "expense",
+        amount: exp.amount,
+        date: new Date().toISOString().split("T")[0],
+        category: exp.category || "Serviços",
+        accountId: "acc-1", // default account
+        description: `Pago: ${exp.name}`,
+        isRecurring: exp.isFixed
+      };
+      
+      updatedTransactions.push(newTx);
+
+      // Deduct from checking account (acc-1)
+      updatedAccounts = updatedAccounts.map(acc => {
+        if (acc.id === "acc-1") {
+          return { ...acc, balance: acc.balance - exp.amount };
+        }
+        return acc;
+      });
+    } else {
+      // Unmark as paid: delete corresponding transaction to restore balance
+      const txToRevert = updatedTransactions.find(t => t.description === `Pago: ${exp.name}` && t.amount === exp.amount);
+      if (txToRevert) {
+        updatedTransactions = updatedTransactions.filter(t => t.id !== txToRevert.id);
+        updatedAccounts = updatedAccounts.map(acc => {
+          if (acc.id === "acc-1") {
+            return { ...acc, balance: acc.balance + exp.amount };
+          }
+          return acc;
+        });
+      }
+    }
+
+    const updated = {
+      ...db,
+      expenses: (db.expenses || []).map(e => e.id === id ? { ...e, paid: newPaidStatus } : e),
+      accounts: updatedAccounts,
+      transactions: updatedTransactions
+    };
+
+    await saveDb(updated);
+  };
+
   // 7. Simulation logger (saves simulation warnings to AI Insights)
   const handleSimulateGasto = async (amount: number, description: string) => {
     if (!db) return;
@@ -430,16 +639,42 @@ export default function App() {
   const handleResetDatabase = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/db", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}) // Sending empty body tells server to regenerate seed
+      const res = await fetch("/api/db/reset", {
+        method: "POST"
       });
       if (res.ok) {
-        await fetchDb();
+        const resetResult = await res.json();
+        let seedDb = resetResult.db as ExcelDatabase;
+        if (db) {
+          // Preserve the user's specific identity details, custom goals, and settings
+          seedDb = {
+            ...seedDb,
+            profile: {
+              ...seedDb.profile,
+              userId: db.profile.userId,
+              name: db.profile.name,
+              email: db.profile.email,
+              incomeType: db.profile.incomeType,
+              payFrequency: db.profile.payFrequency,
+              financialGoal: db.profile.financialGoal,
+              riskProfile: db.profile.riskProfile,
+              onboardingCompleted: db.profile.onboardingCompleted
+            },
+            settings: {
+              ...seedDb.settings,
+              ...db.settings
+            }
+          };
+        }
+        await saveDb(seedDb);
+      } else {
+        throw new Error("Erro de resposta do servidor no reset.");
       }
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao resetar o banco de dados:", err);
+      alert("Houve um erro ao restaurar os dados padrões de simulação.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -549,12 +784,12 @@ export default function App() {
           {/* Nav List */}
           <nav className="space-y-1.5">
             {[
-              { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
-              { id: "fluxo", label: "Fluxo Financeiro", icon: <TrendingUp className="w-4.5 h-4.5" /> },
-              { id: "patrimonio", label: "Patrimônio & Passivos", icon: <Briefcase className="w-4.5 h-4.5" /> },
-              { id: "metas", label: "Metas & Sonhos", icon: <Award className="w-4.5 h-4.5" /> },
-              { id: "coach", label: "Consultor de IA", icon: <Bot className="w-4.5 h-4.5" /> },
-              { id: "settings", label: "Configurações", icon: <Settings className="w-4.5 h-4.5" /> }
+              { id: "dashboard", label: "Início (Resumo)", icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
+              { id: "fluxo", label: "Entradas, Saídas e Contas", icon: <TrendingUp className="w-4.5 h-4.5" /> },
+              { id: "patrimonio", label: "Meu Dinheiro (Bens e Dívidas)", icon: <Briefcase className="w-4.5 h-4.5" /> },
+              { id: "metas", label: "Meus Sonhos e Objetivos", icon: <Award className="w-4.5 h-4.5" /> },
+              { id: "coach", label: "Conversar com IA", icon: <Bot className="w-4.5 h-4.5" /> },
+              { id: "settings", label: "Ajustes e Conta", icon: <Settings className="w-4.5 h-4.5" /> }
             ].map(tab => (
               <button
                 id={`sidebar-nav-${tab.id}`}
@@ -658,6 +893,8 @@ export default function App() {
                   data={db} 
                   onAddTransaction={handleAddTransaction}
                   onSimulateGasto={handleSimulateGasto}
+                  onEditGoal={handleEditGoal}
+                  onEditAccount={handleEditAccount}
                 />
               )}
               {activeTab === "fluxo" && (
@@ -665,19 +902,32 @@ export default function App() {
                   data={db} 
                   onAddTransaction={handleAddTransaction}
                   onDeleteTransaction={handleDeleteTransaction}
+                  onEditTransaction={handleEditTransaction}
+                  onAddExpense={handleAddExpense}
+                  onEditExpense={handleEditExpense}
+                  onDeleteExpense={handleDeleteExpense}
+                  onToggleExpensePaid={handleToggleExpensePaid}
                 />
               )}
               {activeTab === "patrimonio" && (
                 <Patrimonio 
                   data={db} 
                   onAddAsset={handleAddAsset}
+                  onDeleteAsset={handleDeleteAsset}
+                  onEditAsset={handleEditAsset}
                   onAddLiability={handleAddLiability}
+                  onDeleteLiability={handleDeleteLiability}
+                  onEditLiability={handleEditLiability}
+                  onEditAccount={handleEditAccount}
+                  onEditCard={handleEditCard}
                 />
               )}
               {activeTab === "metas" && (
                 <MetasView 
                   data={db} 
                   onAddGoal={handleAddGoal}
+                  onDeleteGoal={handleDeleteGoal}
+                  onEditGoal={handleEditGoal}
                 />
               )}
               {activeTab === "coach" && (
@@ -704,11 +954,11 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#111111]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-around px-2 z-40 md:hidden">
         {[
-          { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
-          { id: "fluxo", label: "Fluxo", icon: <TrendingUp className="w-5 h-5" /> },
-          { id: "patrimonio", label: "Patrimônio", icon: <Briefcase className="w-5 h-5" /> },
-          { id: "metas", label: "Metas", icon: <Award className="w-5 h-5" /> },
-          { id: "coach", label: "IA Coach", icon: <Bot className="w-5 h-5" /> },
+          { id: "dashboard", label: "Resumo", icon: <LayoutDashboard className="w-5 h-5" /> },
+          { id: "fluxo", label: "Finanças", icon: <TrendingUp className="w-5 h-5" /> },
+          { id: "patrimonio", label: "Bens/Dívidas", icon: <Briefcase className="w-5 h-5" /> },
+          { id: "metas", label: "Sonhos", icon: <Award className="w-5 h-5" /> },
+          { id: "coach", label: "IA Falar", icon: <Bot className="w-5 h-5" /> },
           { id: "settings", label: "Ajustes", icon: <Settings className="w-5 h-5" /> }
         ].map(tab => (
           <button

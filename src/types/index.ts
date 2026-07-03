@@ -58,6 +58,7 @@ export interface Expense {
   frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'variable';
   dueDate: string; // YYYY-MM-DD
   isFixed: boolean;
+  paid?: boolean; // New: payment status tracker
 }
 
 export interface Transaction {
