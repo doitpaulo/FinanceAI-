@@ -66,8 +66,8 @@ export default function App() {
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
       const origin = event.origin;
-      // Accept messages from AI Studio preview domain or localhost
-      if (!origin.endsWith(".run.app") && !origin.includes("localhost")) {
+      // Accept messages from AI Studio preview domain, vercel or localhost
+      if (!origin.endsWith(".run.app") && !origin.includes("localhost") && !origin.endsWith(".vercel.app")) {
         return;
       }
       if (event.data?.type === "OAUTH_AUTH_SUCCESS") {

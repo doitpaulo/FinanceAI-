@@ -9,7 +9,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { ExcelDatabase, AIInsight, Transaction, Account, Card, Goal } from "./src/types/index.js";
+import { ExcelDatabase, AIInsight, Transaction, Account, Card, Goal } from "./src/types/index";
 
 dotenv.config();
 
