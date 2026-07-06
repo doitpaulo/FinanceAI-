@@ -26,6 +26,7 @@ export default function SettingsView({
   const [incomeType, setIncomeType] = useState(data.profile.incomeType);
   const [payFrequency, setPayFrequency] = useState(data.profile.payFrequency);
   const [riskProfile, setRiskProfile] = useState(data.profile.riskProfile);
+  const [dailySpendingLimit, setDailySpendingLimit] = useState(data.profile.dailySpendingLimit?.toString() || "");
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +35,8 @@ export default function SettingsView({
       financialGoal,
       incomeType,
       payFrequency,
-      riskProfile
+      riskProfile,
+      dailySpendingLimit: dailySpendingLimit ? parseFloat(dailySpendingLimit) : undefined
     });
     alert("Perfil atualizado no Excel simulado com sucesso!");
   };
@@ -86,6 +88,19 @@ export default function SettingsView({
                 value={financialGoal}
                 onChange={(e) => setFinancialGoal(e.target.value)}
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Limite Diário de Gastos Desejado (R$)</label>
+              <input
+                id="settings-daily-limit-input"
+                type="number"
+                placeholder="Ex: 100 (Deixe em branco para sem limite)"
+                className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-sm font-sans text-white transition"
+                value={dailySpendingLimit}
+                onChange={(e) => setDailySpendingLimit(e.target.value)}
+              />
+              <span className="text-[10px] text-slate-500 block">O assistente irá alertar com um aviso/popup sempre que um lançamento estiver perto ou acima deste teto diário.</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

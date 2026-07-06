@@ -6,11 +6,13 @@
 import React, { useState, useEffect } from "react";
 import { 
   LayoutDashboard, TrendingUp, Briefcase, Award, Bot, Settings, 
-  Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut, Database
+  Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut, Database,
+  ShieldAlert, AlertCircle, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ExcelDatabase, Transaction, Asset, Liability, Goal, Profile, Settings as SettingsType, Expense, Account, Card } from "./types";
 import Dashboard from "./components/Dashboard";
+import LancamentosView from "./components/LancamentosView";
 import FluxoFinanceiro from "./components/FluxoFinanceiro";
 import Patrimonio from "./components/Patrimonio";
 import MetasView from "./components/MetasView";
@@ -23,7 +25,7 @@ import { auth, signInWithGoogle, logoutFirebase, fetchUserDatabaseFromFirestore,
 import { onAuthStateChanged } from "firebase/auth";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "fluxo" | "patrimonio" | "metas" | "coach" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "lancamentos" | "fluxo" | "patrimonio" | "metas" | "coach" | "settings">("dashboard");
   const [db, setDb] = useState<ExcelDatabase | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,13 @@ export default function App() {
   });
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [firebaseLoading, setFirebaseLoading] = useState(true);
+
+  // States for Daily Limit and Income Deficit Popups
+  const [pendingTx, setPendingTx] = useState<Omit<Transaction, "id"> | null>(null);
+  const [txWarnings, setTxWarnings] = useState<{
+    dailyLimit?: { limit: number; current: number; valWithNew: number; close: boolean; exceeded: boolean };
+    incomeDeficit?: { expected: number; current: number; valWithNew: number };
+  } | null>(null);
 
   // Fetch Excel database from our server
   const fetchDb = async () => {
@@ -288,6 +297,72 @@ export default function App() {
 
   // 2. Add Transaction Action
   const handleAddTransaction = async (txData: Omit<Transaction, "id">) => {
+    if (!db) return;
+
+    if (txData.type === "expense") {
+      const todayStr = txData.date; // e.g. YYYY-MM-DD
+      const currentMonthStr = todayStr.substring(0, 7);
+
+      // Check daily spending limit
+      const dailySpendingLimit = db.profile.dailySpendingLimit;
+      let dailyLimitWarning = undefined;
+      if (dailySpendingLimit && dailySpendingLimit > 0) {
+        const todayExpenses = db.transactions
+          .filter(t => t.type === "expense" && t.date === todayStr)
+          .reduce((sum, t) => sum + t.amount, 0);
+        const valWithNew = todayExpenses + txData.amount;
+        const exceeded = valWithNew > dailySpendingLimit;
+        const close = valWithNew >= dailySpendingLimit * 0.8; // 80% or more
+        if (close || exceeded) {
+          dailyLimitWarning = {
+            limit: dailySpendingLimit,
+            current: todayExpenses,
+            valWithNew,
+            close,
+            exceeded
+          };
+        }
+      }
+
+      // Check income deficit: spending more than expected/received monthly incomes
+      let incomeDeficitWarning = undefined;
+      const expectedIncome = db.incomeSources.reduce((sum, s) => {
+        return sum + s.expectedValue;
+      }, 0);
+      const actualIncomeThisMonth = db.transactions
+        .filter(t => t.type === "income" && t.date.startsWith(currentMonthStr))
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const incomeToCompare = Math.max(expectedIncome, actualIncomeThisMonth, 1600);
+
+      const monthlyExpenses = db.transactions
+        .filter(t => t.type === "expense" && t.date.startsWith(currentMonthStr))
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const totalWithNew = monthlyExpenses + txData.amount;
+
+      if (totalWithNew > incomeToCompare) {
+        incomeDeficitWarning = {
+          expected: incomeToCompare,
+          current: monthlyExpenses,
+          valWithNew: totalWithNew
+        };
+      }
+
+      if (dailyLimitWarning || incomeDeficitWarning) {
+        setPendingTx(txData);
+        setTxWarnings({
+          dailyLimit: dailyLimitWarning,
+          incomeDeficit: incomeDeficitWarning
+        });
+        return;
+      }
+    }
+
+    await commitAddTransaction(txData);
+  };
+
+  const commitAddTransaction = async (txData: Omit<Transaction, "id">) => {
     if (!db) return;
     const newTx: Transaction = {
       ...txData,
@@ -785,8 +860,9 @@ export default function App() {
           <nav className="space-y-1.5">
             {[
               { id: "dashboard", label: "Início (Resumo)", icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
-              { id: "fluxo", label: "Entradas, Saídas e Contas", icon: <TrendingUp className="w-4.5 h-4.5" /> },
-              { id: "patrimonio", label: "Meu Dinheiro (Bens e Dívidas)", icon: <Briefcase className="w-4.5 h-4.5" /> },
+              { id: "lancamentos", label: "Lançamentos e Extratos", icon: <RefreshCw className="w-4.5 h-4.5" /> },
+              { id: "fluxo", label: "Contas do Mês (Vencimentos)", icon: <TrendingUp className="w-4.5 h-4.5" /> },
+              { id: "patrimonio", label: "Meu Dinheiro (Bens/Dívidas)", icon: <Briefcase className="w-4.5 h-4.5" /> },
               { id: "metas", label: "Meus Sonhos e Objetivos", icon: <Award className="w-4.5 h-4.5" /> },
               { id: "coach", label: "Conversar com IA", icon: <Bot className="w-4.5 h-4.5" /> },
               { id: "settings", label: "Ajustes e Conta", icon: <Settings className="w-4.5 h-4.5" /> }
@@ -897,12 +973,17 @@ export default function App() {
                   onEditAccount={handleEditAccount}
                 />
               )}
-              {activeTab === "fluxo" && (
-                <FluxoFinanceiro 
+              {activeTab === "lancamentos" && (
+                <LancamentosView 
                   data={db} 
                   onAddTransaction={handleAddTransaction}
                   onDeleteTransaction={handleDeleteTransaction}
                   onEditTransaction={handleEditTransaction}
+                />
+              )}
+              {activeTab === "fluxo" && (
+                <FluxoFinanceiro 
+                  data={db} 
                   onAddExpense={handleAddExpense}
                   onEditExpense={handleEditExpense}
                   onDeleteExpense={handleDeleteExpense}
@@ -955,10 +1036,11 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#111111]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-around px-2 z-40 md:hidden">
         {[
           { id: "dashboard", label: "Resumo", icon: <LayoutDashboard className="w-5 h-5" /> },
-          { id: "fluxo", label: "Finanças", icon: <TrendingUp className="w-5 h-5" /> },
-          { id: "patrimonio", label: "Bens/Dívidas", icon: <Briefcase className="w-5 h-5" /> },
+          { id: "lancamentos", label: "Lançar", icon: <RefreshCw className="w-5 h-5" /> },
+          { id: "fluxo", label: "Contas", icon: <TrendingUp className="w-5 h-5" /> },
+          { id: "patrimonio", label: "Bens", icon: <Briefcase className="w-5 h-5" /> },
           { id: "metas", label: "Sonhos", icon: <Award className="w-5 h-5" /> },
-          { id: "coach", label: "IA Falar", icon: <Bot className="w-5 h-5" /> },
+          { id: "coach", label: "IA", icon: <Bot className="w-5 h-5" /> },
           { id: "settings", label: "Ajustes", icon: <Settings className="w-5 h-5" /> }
         ].map(tab => (
           <button
@@ -975,6 +1057,107 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {/* WARNING POPUP MODAL */}
+      <AnimatePresence>
+        {pendingTx && txWarnings && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              className="bg-[#111111] border border-white/10 rounded-3xl p-6 max-w-lg w-full space-y-6 text-left shadow-2xl relative"
+            >
+              <button
+                onClick={() => { setPendingTx(null); setTxWarnings(null); }}
+                className="absolute right-4 top-4 text-slate-400 hover:text-white transition p-1.5 hover:bg-white/5 rounded-full cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="space-y-2">
+                <span className="text-[10px] font-mono text-rose-400 font-bold uppercase tracking-wider block">🚨 ALERTA DO CO-PILOTO FINANCEIRO</span>
+                <h3 className="text-lg font-bold text-white">Confirmação de Despesa Necessária</h3>
+                <p className="text-xs text-slate-400">Identificamos riscos ao seu planejamento financeiro para esta transação:</p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Daily Spending Limit Warning */}
+                {txWarnings.dailyLimit && (
+                  <div className="p-4 bg-amber-950/20 border border-amber-500/30 rounded-2xl space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <strong className="text-xs text-amber-300 block">
+                          {txWarnings.dailyLimit.exceeded ? "Limite Diário Ultrapassado!" : "Próximo ao Limite Diário!"}
+                        </strong>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          Seu teto diário é de <span className="font-mono text-amber-400 font-bold">R$ {txWarnings.dailyLimit.limit.toLocaleString("pt-BR")}</span>. 
+                          Você já gastou <span className="font-mono text-slate-400">R$ {txWarnings.dailyLimit.current.toLocaleString("pt-BR")}</span> hoje. 
+                          Esse novo lançamento de <span className="font-mono text-white font-bold">R$ {pendingTx.amount.toLocaleString("pt-BR")}</span> levará o total do dia para <span className="font-mono text-amber-400 font-bold">R$ {txWarnings.dailyLimit.valWithNew.toLocaleString("pt-BR")}</span>.
+                        </p>
+                      </div>
+                    </div>
+                    {/* Visual Bar Indicator */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>Progresso Diário</span>
+                        <span>{Math.round((txWarnings.dailyLimit.valWithNew / txWarnings.dailyLimit.limit) * 100)}%</span>
+                      </div>
+                      <div className="h-2 bg-white/5 rounded-full overflow-hidden flex">
+                        <div className="bg-amber-500 h-full" style={{ width: `${Math.min(100, (txWarnings.dailyLimit.current / txWarnings.dailyLimit.limit) * 100)}%` }} />
+                        <div className="bg-amber-400 h-full opacity-60 animate-pulse" style={{ width: `${Math.min(100 - (txWarnings.dailyLimit.current / txWarnings.dailyLimit.limit) * 100, (pendingTx.amount / txWarnings.dailyLimit.limit) * 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Income Deficit Warning */}
+                {txWarnings.incomeDeficit && (
+                  <div className="p-4 bg-rose-950/20 border border-rose-500/30 rounded-2xl space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <strong className="text-xs text-rose-300 block">Déficit Orçamentário Mensal!</strong>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          Sua entrada prevista para este mês é de <span className="font-mono text-emerald-400 font-bold">R$ {txWarnings.incomeDeficit.expected.toLocaleString("pt-BR")}</span>. 
+                          Seus gastos anteriores somam <span className="font-mono text-slate-400">R$ {txWarnings.incomeDeficit.current.toLocaleString("pt-BR")}</span>. 
+                          Este novo gasto de <span className="font-mono text-white font-bold">R$ {pendingTx.amount.toLocaleString("pt-BR")}</span> levará o total do mês para <span className="font-mono text-rose-400 font-bold">R$ {txWarnings.incomeDeficit.valWithNew.toLocaleString("pt-BR")}</span>, ultrapassando suas receitas previstas em <span className="font-mono text-rose-400 font-bold">R$ {(txWarnings.incomeDeficit.valWithNew - txWarnings.incomeDeficit.expected).toLocaleString("pt-BR")}</span>.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 bg-[#050505] rounded-xl text-[11px] text-slate-400 leading-relaxed border border-white/5">
+                💡 <strong>Análise do Co-piloto:</strong> Gastar mais do que você ganha ou estourar o limite diário pode forçar você a recorrer ao cartão de crédito e comprometer sua reserva de emergência.
+              </div>
+
+              <div className="flex gap-3 text-xs font-bold pt-2">
+                <button
+                  onClick={() => { setPendingTx(null); setTxWarnings(null); }}
+                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl cursor-pointer text-center"
+                >
+                  Cancelar Lançamento
+                </button>
+                <button
+                  onClick={async () => {
+                    if (pendingTx) {
+                      await commitAddTransaction(pendingTx);
+                      setPendingTx(null);
+                      setTxWarnings(null);
+                    }
+                  }}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl cursor-pointer text-center font-bold"
+                >
+                  Registrar Mesmo Assim
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

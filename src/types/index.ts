@@ -12,6 +12,7 @@ export interface Profile {
   financialGoal: string;
   riskProfile: 'conservador' | 'moderado' | 'agressivo';
   onboardingCompleted: boolean;
+  dailySpendingLimit?: number;
 }
 
 export interface Settings {
