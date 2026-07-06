@@ -6,8 +6,9 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { ExcelDatabase, AIInsight, Transaction, Account, Card, Goal } from "./src/types/index";
 
@@ -18,8 +19,10 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Path for simulated database
-const SIM_DB_PATH = path.join(process.cwd(), "sim_database.json");
+// Path for simulated database (Use OS temporary directory on Vercel/Serverless to avoid read-only filesystem issues)
+const SIM_DB_PATH = process.env.VERCEL
+  ? path.join(os.tmpdir(), "sim_database.json")
+  : path.join(process.cwd(), "sim_database.json");
 
 // Default initial seed data (Realistic CLT scenario)
 const defaultSeedData = (): ExcelDatabase => {
@@ -119,7 +122,11 @@ const defaultSeedData = (): ExcelDatabase => {
 function readDatabase(): ExcelDatabase {
   if (!fs.existsSync(SIM_DB_PATH)) {
     const defaultData = defaultSeedData();
-    fs.writeFileSync(SIM_DB_PATH, JSON.stringify(defaultData, null, 2), "utf-8");
+    try {
+      fs.writeFileSync(SIM_DB_PATH, JSON.stringify(defaultData, null, 2), "utf-8");
+    } catch (err) {
+      console.error("Erro ao inicializar arquivo do banco simulado:", err);
+    }
     return defaultData;
   }
   try {
@@ -784,6 +791,96 @@ Como posso ajudar você a planejar suas metas hoje?`;
   } catch (err: any) {
     console.error("Erro na chamada do Gemini API:", err);
     res.status(500).json({ error: "Falha na comunicação com o cérebro de IA do Gemini." });
+  }
+});
+
+// Real AI PDF Bank Statement Parsing Endpoint using Gemini 3.5-flash
+app.post("/api/ai/parse-statement", async (req, res) => {
+  const { fileBase64, fileName } = req.body;
+  if (!fileBase64) {
+    res.status(400).json({ error: "Arquivo base64 ausente ou inválido." });
+    return;
+  }
+
+  const aiClient = getGeminiAI();
+  if (!aiClient) {
+    res.status(500).json({ error: "Chave do Gemini API não configurada no servidor." });
+    return;
+  }
+
+  try {
+    const prompt = `Analise atentamente o extrato bancário em formato PDF em anexo. 
+Extraia TODOS os lançamentos de transações contidos na tabela ou lista de lançamentos do extrato (ignore saldos anteriores, resumos de crédito/débito, cabeçalhos, rodapés e outras informações gerais).
+
+Regras de Extração e Conversão:
+1. Extraia o campo "date" no formato de data ISO "YYYY-MM-DD". Se o extrato não especificar o ano, utilize o ano corrente de 2026.
+2. Identifique a descrição "description" limpa e legível (ex: "COMPRA DEBITO - SUPERMERCADO EXCEL" ou "PIX RECEBIDO - MARIANA COSTA").
+3. Determine o valor "amount" sempre como um número real estritamente positivo (ex: se for -245.80, retorne 245.80).
+4. Classifique a transação no campo "type": "income" para créditos/entradas/rendimentos/Pix recebido, e "expense" para débitos/saídas/compras/saques/Pix enviado/tarifas.
+5. Classifique cada lançamento no campo "category" obrigatoriamente usando uma das seguintes categorias exatas:
+   Para receitas ("type" igual a "income"):
+     - "Salário" (salário CLT, pagamentos recorrentes de folha de pagamento)
+     - "Investimentos" (rendimentos de poupança, dividendos, resgates automáticos)
+     - "Freelance" (trabalhos extras, freelancer, bicos)
+     - "Outros" (outros recebimentos gerais)
+   Para despesas ("type" igual a "expense"):
+     - "Alimentação" (compras em supermercado, sacolão, padaria, restaurantes, fast-food, lanchonetes)
+     - "Moradia" (aluguel, condomínio, luz/Enel, água, gás, reformas básicas)
+     - "Transporte" (combustível, postos de gasolina, Uber/99, ônibus, metrô, pedágio)
+     - "Serviços" (tarifas bancárias, taxas de serviços, contas de telefone/internet, impostos, boletos de rotina)
+     - "Lazer" (assinaturas de streaming, Netflix, Spotify, cinema, shows, barzinho, hotéis, viagens de lazer)
+     - "Educação" (mensalidade escolar, cursos online, livros)
+     - "Saúde" (gastos em farmácia, medicamentos, consultas médicas, exames)
+     - "Outros" (qualquer outra despesa que não se encaixe nas anteriores)
+
+6. Gere um campo "id" para cada transação sendo uma string única começando com "pe-" (ex: "pe-1", "pe-2", etc.).
+7. O campo "selected" deve ser sempre o booleano true por padrão.
+
+Retorne uma lista estruturada como um array JSON de objetos contendo exatamente esses atributos.`;
+
+    const response = await aiClient.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [
+        {
+          inlineData: {
+            mimeType: "application/pdf",
+            data: fileBase64
+          }
+        },
+        prompt
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              date: { type: Type.STRING, description: "YYYY-MM-DD format" },
+              description: { type: Type.STRING },
+              amount: { type: Type.NUMBER },
+              type: { type: Type.STRING, description: "'income' or 'expense'" },
+              category: { type: Type.STRING, description: "Must be one of the precise category strings allowed" },
+              selected: { type: Type.BOOLEAN }
+            },
+            required: ["id", "date", "description", "amount", "type", "category", "selected"]
+          }
+        },
+        temperature: 0.1
+      }
+    });
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error("Resposta vazia retornada pelo modelo Gemini.");
+    }
+
+    const transactions = JSON.parse(responseText.trim());
+    res.json({ success: true, transactions });
+  } catch (err: any) {
+    console.error("Erro ao analisar o extrato com Gemini:", err);
+    res.status(500).json({ error: "Falha ao analisar o extrato bancário com inteligência artificial.", details: err.message });
   }
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { User, Shield, RefreshCw, Settings, Info, Cloud, Database, Sparkles } from "lucide-react";
 import { ExcelDatabase, Profile, Settings as SettingsType } from "../types";
 
@@ -7,7 +7,7 @@ interface SettingsProps {
   firebaseUser: any;
   onLoginFirebase: () => void;
   onLogoutFirebase: () => void;
-  onUpdateProfile: (prof: Partial<Profile>) => void;
+  onUpdateProfile: (prof: Partial<Profile> & { expectedIncome?: number }) => void;
   onUpdateSettings: (set: Partial<SettingsType>) => void;
   onResetDatabase: () => void;
 }
@@ -27,6 +27,18 @@ export default function SettingsView({
   const [payFrequency, setPayFrequency] = useState(data.profile.payFrequency);
   const [riskProfile, setRiskProfile] = useState(data.profile.riskProfile);
   const [dailySpendingLimit, setDailySpendingLimit] = useState(data.profile.dailySpendingLimit?.toString() || "");
+  const [expectedIncome, setExpectedIncome] = useState(data.incomeSources[0]?.expectedValue?.toString() || "0");
+
+  // Keep state updated if data prop changes (e.g., database reset or sync)
+  useEffect(() => {
+    setName(data.profile.name);
+    setFinancialGoal(data.profile.financialGoal || "");
+    setIncomeType(data.profile.incomeType || "CLT");
+    setPayFrequency(data.profile.payFrequency || "mensal");
+    setRiskProfile(data.profile.riskProfile || "moderado");
+    setDailySpendingLimit(data.profile.dailySpendingLimit?.toString() || "");
+    setExpectedIncome(data.incomeSources[0]?.expectedValue?.toString() || "0");
+  }, [data.profile, data.incomeSources]);
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,9 +48,10 @@ export default function SettingsView({
       incomeType,
       payFrequency,
       riskProfile,
-      dailySpendingLimit: dailySpendingLimit ? parseFloat(dailySpendingLimit) : undefined
+      dailySpendingLimit: dailySpendingLimit ? parseFloat(dailySpendingLimit) : undefined,
+      expectedIncome: expectedIncome ? parseFloat(expectedIncome) : undefined
     });
-    alert("Perfil atualizado no Excel simulado com sucesso!");
+    alert("Perfil e renda ajustados com sucesso!");
   };
 
   return (
@@ -87,6 +100,18 @@ export default function SettingsView({
                 className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-sm font-sans text-white transition"
                 value={financialGoal}
                 onChange={(e) => setFinancialGoal(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Renda Mensal Prevista (R$)</label>
+              <input
+                id="settings-income-input"
+                type="number"
+                className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-sm font-sans text-white transition"
+                value={expectedIncome}
+                onChange={(e) => setExpectedIncome(e.target.value)}
+                required
               />
             </div>
 

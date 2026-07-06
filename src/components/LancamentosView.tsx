@@ -10,6 +10,7 @@ import { ExcelDatabase, Transaction } from "../types";
 interface LancamentosProps {
   data: ExcelDatabase;
   onAddTransaction: (tx: Omit<Transaction, "id">) => void;
+  onAddTransactions?: (txs: Array<Omit<Transaction, "id">>) => void;
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (id: string, tx: Partial<Transaction>) => void;
 }
@@ -17,6 +18,7 @@ interface LancamentosProps {
 export default function LancamentosView({
   data,
   onAddTransaction,
+  onAddTransactions,
   onDeleteTransaction,
   onEditTransaction
 }: LancamentosProps) {
@@ -27,6 +29,8 @@ export default function LancamentosView({
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState<string>(new Date().toISOString().substring(5, 7));
+  const [yearFilter, setYearFilter] = useState<string>(new Date().getFullYear().toString());
   const [sortBy, setSortBy] = useState<"date-desc" | "date-asc" | "amount-desc" | "amount-asc">("date-desc");
 
   // Bank statement import states
@@ -61,6 +65,84 @@ export default function LancamentosView({
   const [editTxAccountId, setEditTxAccountId] = useState("acc-1");
   const [editTxDate, setEditTxDate] = useState("");
 
+  // Warning Interceptor States for Daily Limit and Monthly Income Deficit
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [warningDetails, setWarningDetails] = useState<{
+    title: string;
+    description: string;
+    type: "daily_exceeded" | "daily_near" | "income_deficit";
+    amount: number;
+    limit?: number;
+    currentSpending?: number;
+    predictedIncome?: number;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const checkTransactionWarnings = (txAmount: number, txDateStr: string): {
+    triggered: boolean;
+    type: "daily_exceeded" | "daily_near" | "income_deficit" | null;
+    title: string;
+    description: string;
+    limit?: number;
+    currentSpending?: number;
+    predictedIncome?: number;
+  } => {
+    // 1. Daily Spending Limit Check
+    const dailyLimit = data.profile.dailySpendingLimit;
+    if (dailyLimit && dailyLimit > 0) {
+      // Find expenses on the same day
+      const expensesOnDay = data.transactions
+        .filter(t => t.type === "expense" && t.date === txDateStr)
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const totalAfterTx = expensesOnDay + txAmount;
+
+      if (totalAfterTx > dailyLimit) {
+        return {
+          triggered: true,
+          type: "daily_exceeded",
+          title: "🚨 Limite Diário Ultrapassado!",
+          description: `Este gasto de R$ ${txAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} fará suas despesas de hoje (R$ ${totalAfterTx.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}) ultrapassarem seu limite diário estipulado de R$ ${dailyLimit.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`,
+          limit: dailyLimit,
+          currentSpending: totalAfterTx
+        };
+      } else if (totalAfterTx >= dailyLimit * 0.85) {
+        return {
+          triggered: true,
+          type: "daily_near",
+          title: "⚠️ Próximo ao Limite Diário!",
+          description: `Atenção: Este gasto de R$ ${txAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} deixará suas despesas de hoje em R$ ${totalAfterTx.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}, o que está muito próximo (ou acima de 85%) do seu limite diário de R$ ${dailyLimit.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`,
+          limit: dailyLimit,
+          currentSpending: totalAfterTx
+        };
+      }
+    }
+
+    // 2. Monthly Deficit Check (Spending more than predicted income)
+    const predictedIncome = data.incomeSources.reduce((sum, inc) => sum + inc.expectedValue, 0) || monthlyIncomes;
+    
+    // Expenses in the target month
+    const targetMonthStr = txDateStr.substring(0, 7);
+    const expensesInMonth = data.transactions
+      .filter(t => t.type === "expense" && t.date.startsWith(targetMonthStr))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalMonthlyAfterTx = expensesInMonth + txAmount;
+
+    if (predictedIncome > 0 && totalMonthlyAfterTx > predictedIncome) {
+      return {
+        triggered: true,
+        type: "income_deficit",
+        title: "🔴 Alerta de Déficit Orçamentário!",
+        description: `Este lançamento fará com que suas despesas mensais totais (R$ ${totalMonthlyAfterTx.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}) superem sua renda prevista para este mês (R$ ${predictedIncome.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}). Evite gastar mais do que você ganha para manter as contas no azul!`,
+        predictedIncome,
+        currentSpending: totalMonthlyAfterTx
+      };
+    }
+
+    return { triggered: false, type: null, title: "", description: "" };
+  };
+
   // Default the category when the manually selected type changes
   useEffect(() => {
     if (type === "income") {
@@ -72,12 +154,51 @@ export default function LancamentosView({
 
   // Calculations for the Summary header
   const currentMonthStr = new Date().toISOString().substring(0, 7);
+  const hasDateFilter = monthFilter !== "all" || yearFilter !== "all";
+
+  const monthNames: Record<string, string> = {
+    "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril",
+    "05": "Maio", "06": "Junho", "07": "Julho", "08": "Agosto",
+    "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro"
+  };
+
+  let summaryPeriodLabel = "Todos os Lançamentos";
+  if (monthFilter !== "all" && yearFilter !== "all") {
+    summaryPeriodLabel = `${monthNames[monthFilter]} de ${yearFilter}`;
+  } else if (monthFilter !== "all") {
+    summaryPeriodLabel = `${monthNames[monthFilter]}`;
+  } else if (yearFilter !== "all") {
+    summaryPeriodLabel = `Ano ${yearFilter}`;
+  }
+
   const monthlyIncomes = data.transactions
-    .filter(t => t.type === "income" && t.date.startsWith(currentMonthStr))
+    .filter(t => {
+      if (t.type !== "income") return false;
+      if (monthFilter !== "all") {
+        const m = t.date.split("-")[1];
+        if (m !== monthFilter) return false;
+      }
+      if (yearFilter !== "all") {
+        const y = t.date.split("-")[0];
+        if (y !== yearFilter) return false;
+      }
+      return true;
+    })
     .reduce((sum, t) => sum + t.amount, 0);
 
   const monthlyExpenses = data.transactions
-    .filter(t => t.type === "expense" && t.date.startsWith(currentMonthStr))
+    .filter(t => {
+      if (t.type !== "expense") return false;
+      if (monthFilter !== "all") {
+        const m = t.date.split("-")[1];
+        if (m !== monthFilter) return false;
+      }
+      if (yearFilter !== "all") {
+        const y = t.date.split("-")[0];
+        if (y !== yearFilter) return false;
+      }
+      return true;
+    })
     .reduce((sum, t) => sum + t.amount, 0);
 
   const netBalance = monthlyIncomes - monthlyExpenses;
@@ -88,21 +209,41 @@ export default function LancamentosView({
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0 || !desc.trim()) return;
 
-    onAddTransaction({
-      type,
-      amount: parsedAmount,
-      date: txDate || new Date().toISOString().split("T")[0],
-      category,
-      accountId,
-      description: desc.trim(),
-      isRecurring
-    });
+    const executeAdd = () => {
+      onAddTransaction({
+        type,
+        amount: parsedAmount,
+        date: txDate || new Date().toISOString().split("T")[0],
+        category,
+        accountId,
+        description: desc.trim(),
+        isRecurring
+      });
 
-    // Reset Form
-    setDesc("");
-    setAmount("");
-    setIsRecurring(false);
-    setTxDate(new Date().toISOString().split("T")[0]);
+      // Reset Form
+      setDesc("");
+      setAmount("");
+      setIsRecurring(false);
+      setTxDate(new Date().toISOString().split("T")[0]);
+      setShowWarningModal(false);
+      setWarningDetails(null);
+    };
+
+    if (type === "expense") {
+      const warning = checkTransactionWarnings(parsedAmount, txDate || new Date().toISOString().split("T")[0]);
+      if (warning.triggered) {
+        setWarningDetails({
+          ...warning,
+          type: warning.type!,
+          amount: parsedAmount,
+          onConfirm: executeAdd
+        });
+        setShowWarningModal(true);
+        return;
+      }
+    }
+
+    executeAdd();
   };
 
   // Simulates reading a bank statement PDF and outputs mock rows
@@ -150,13 +291,64 @@ export default function LancamentosView({
     }, 1500);
   };
 
+  // Reads a real bank statement PDF, converts it to base64, and sends it to Gemini API
+  const parseRealPdf = (file: File) => {
+    setImportingState("parsing");
+    setImportSuccessCount(null);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const result = event.target?.result as string;
+        const base64 = result.split(",")[1];
+
+        const response = await fetch("/api/ai/parse-statement", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: file.name
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.details || "Erro desconhecido ao processar extrato.");
+        }
+
+        const data = await response.json();
+        if (data.success && Array.isArray(data.transactions)) {
+          setParsedTransactions(data.transactions);
+          setImportingState("parsed");
+        } else {
+          throw new Error("Resposta de processamento inválida do servidor.");
+        }
+      } catch (err: any) {
+        console.error("Erro na leitura/processamento do extrato:", err);
+        alert(`Não foi possível extrair dados do extrato: ${err.message}`);
+        setImportingState("idle");
+        setStatementFile(null);
+      }
+    };
+
+    reader.onerror = () => {
+      alert("Erro ao ler o arquivo PDF localmente.");
+      setImportingState("idle");
+      setStatementFile(null);
+    };
+
+    reader.readAsDataURL(file);
+  };
+
   // Commits the selected items from statement to the persistent database
   const handleCommitPdfImport = () => {
     const selected = parsedTransactions.filter(t => t.selected);
     if (selected.length === 0) return;
     
-    selected.forEach(t => {
-      onAddTransaction({
+    const executeBulkAdd = () => {
+      const txsToSave = selected.map(t => ({
         type: t.type,
         amount: t.amount,
         date: t.date,
@@ -164,13 +356,61 @@ export default function LancamentosView({
         accountId: "acc-1",
         description: `[Extrato] ${t.description}`,
         isRecurring: false
+      }));
+
+      if (onAddTransactions) {
+        onAddTransactions(txsToSave);
+      } else {
+        selected.forEach(t => {
+          onAddTransaction({
+            type: t.type,
+            amount: t.amount,
+            date: t.date,
+            category: t.category,
+            accountId: "acc-1",
+            description: `[Extrato] ${t.description}`,
+            isRecurring: false
+          });
+        });
+      }
+      
+      setImportSuccessCount(selected.length);
+      setImportingState("idle");
+      setStatementFile(null);
+      setParsedTransactions([]);
+      setShowWarningModal(false);
+      setWarningDetails(null);
+    };
+
+    // Check if any of the imported expenses trigger a warning
+    let triggeredWarning: any = null;
+    for (const t of selected) {
+      if (t.type === "expense") {
+        const warning = checkTransactionWarnings(t.amount, t.date);
+        if (warning.triggered) {
+          triggeredWarning = warning;
+          // Prioritize higher severity alerts (exceeded/deficit) if any
+          if (warning.type === "daily_exceeded" || warning.type === "income_deficit") {
+            break;
+          }
+        }
+      }
+    }
+
+    if (triggeredWarning) {
+      setWarningDetails({
+        ...triggeredWarning,
+        type: triggeredWarning.type!,
+        amount: selected.reduce((sum, t) => sum + (t.type === "expense" ? t.amount : 0), 0),
+        title: `${triggeredWarning.title} (Via Extrato)`,
+        description: `Durante a importação do extrato, identificamos alertas críticos. Exemplo: ${triggeredWarning.description}`,
+        onConfirm: executeBulkAdd
       });
-    });
-    
-    setImportSuccessCount(selected.length);
-    setImportingState("idle");
-    setStatementFile(null);
-    setParsedTransactions([]);
+      setShowWarningModal(true);
+      return;
+    }
+
+    executeBulkAdd();
   };
 
   // Inline editing handles
@@ -203,7 +443,9 @@ export default function LancamentosView({
 
   // Filter, Search, and Sort Logic
   const allCategories = Array.from(new Set(data.transactions.map(t => t.category)));
-
+  const availableYears = Array.from(new Set(data.transactions.map(t => t.date.split("-")[0]))).sort().reverse();
+  const years = availableYears.length > 0 ? availableYears : [new Date().getFullYear().toString()];
+ 
   const filteredTransactions = data.transactions.filter(t => {
     // 1. Search Query Match
     const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -215,7 +457,21 @@ export default function LancamentosView({
     // 3. Category Match
     const matchesCategory = categoryFilter === "all" || t.category === categoryFilter;
 
-    return matchesSearch && matchesType && matchesCategory;
+    // 4. Month Match
+    let matchesMonth = true;
+    if (monthFilter !== "all") {
+      const m = t.date.split("-")[1];
+      matchesMonth = m === monthFilter;
+    }
+
+    // 5. Year Match
+    let matchesYear = true;
+    if (yearFilter !== "all") {
+      const y = t.date.split("-")[0];
+      matchesYear = y === yearFilter;
+    }
+
+    return matchesSearch && matchesType && matchesCategory && matchesMonth && matchesYear;
   });
 
   // Sorting
@@ -272,7 +528,7 @@ export default function LancamentosView({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 text-left flex items-center justify-between relative overflow-hidden group">
           <div className="space-y-2">
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">Entradas do Mês</span>
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">Entradas ({summaryPeriodLabel})</span>
             <div className="text-lg md:text-xl font-bold text-white font-mono">
               R$ {monthlyIncomes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </div>
@@ -285,7 +541,7 @@ export default function LancamentosView({
 
         <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 text-left flex items-center justify-between relative overflow-hidden group">
           <div className="space-y-2">
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">Saídas do Mês</span>
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">Saídas ({summaryPeriodLabel})</span>
             <div className="text-lg md:text-xl font-bold text-white font-mono">
               R$ {monthlyExpenses.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </div>
@@ -298,7 +554,7 @@ export default function LancamentosView({
 
         <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 text-left flex items-center justify-between relative overflow-hidden group">
           <div className="space-y-2">
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">Saldo Mensal</span>
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">Saldo ({summaryPeriodLabel})</span>
             <div className={`text-lg md:text-xl font-bold font-mono ${netBalance >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {netBalance >= 0 ? "+" : ""} R$ {netBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </div>
@@ -481,12 +737,28 @@ export default function LancamentosView({
                   </div>
 
                   {/* Drop zone / selector */}
-                  <div className="border border-dashed border-white/10 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-indigo-950/5 transition duration-300 flex flex-col items-center justify-center text-center space-y-3">
+                  <div 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files?.[0];
+                      if (file && file.type === "application/pdf") {
+                        setStatementFile(file);
+                        parseRealPdf(file);
+                      } else {
+                        alert("Por favor, envie um arquivo em formato PDF.");
+                      }
+                    }}
+                    className="border border-dashed border-white/10 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-indigo-950/5 transition duration-300 flex flex-col items-center justify-center text-center space-y-3 cursor-pointer"
+                    onClick={() => document.getElementById("main-pdf-upload")?.click()}
+                  >
                     <div className="p-3 bg-indigo-500/10 rounded-full text-indigo-400">
                       <FileText className="w-6 h-6" />
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[11px] font-bold text-white">Clique para selecionar</p>
+                      <p className="text-[11px] font-bold text-white">Clique ou arraste o arquivo aqui</p>
                       <p className="text-[9px] text-slate-500">Formato PDF apenas (.pdf)</p>
                     </div>
                     <input 
@@ -498,13 +770,20 @@ export default function LancamentosView({
                         const file = e.target.files?.[0];
                         if (file) {
                           setStatementFile(file);
-                          triggerPdfSimulation(file.name);
+                          if (file.size > 0) {
+                            parseRealPdf(file);
+                          } else {
+                            triggerPdfSimulation(file.name);
+                          }
                         }
                       }}
                     />
                     <button 
                       type="button"
-                      onClick={() => document.getElementById("main-pdf-upload")?.click()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        document.getElementById("main-pdf-upload")?.click();
+                      }}
                       className="px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white text-indigo-400 text-[10px] font-bold rounded-lg transition cursor-pointer"
                     >
                       Selecionar Arquivo
@@ -717,10 +996,10 @@ export default function LancamentosView({
                   </div>
 
                   {/* Filters Grid */}
-                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {/* Type select */}
                     <select
-                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer"
+                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer min-w-[120px]"
                       value={typeFilter}
                       onChange={(e) => setTypeFilter(e.target.value as any)}
                     >
@@ -731,7 +1010,7 @@ export default function LancamentosView({
 
                     {/* Category select */}
                     <select
-                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer max-w-[140px]"
+                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer min-w-[130px] max-w-[150px]"
                       value={categoryFilter}
                       onChange={(e) => setCategoryFilter(e.target.value)}
                     >
@@ -741,9 +1020,42 @@ export default function LancamentosView({
                       ))}
                     </select>
 
+                    {/* Month select */}
+                    <select
+                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer min-w-[120px]"
+                      value={monthFilter}
+                      onChange={(e) => setMonthFilter(e.target.value)}
+                    >
+                      <option value="all">Mês (Todos)</option>
+                      <option value="01">Janeiro</option>
+                      <option value="02">Fevereiro</option>
+                      <option value="03">Março</option>
+                      <option value="04">Abril</option>
+                      <option value="05">Maio</option>
+                      <option value="06">Junho</option>
+                      <option value="07">Julho</option>
+                      <option value="08">Agosto</option>
+                      <option value="09">Setembro</option>
+                      <option value="10">Outubro</option>
+                      <option value="11">Novembro</option>
+                      <option value="12">Dezembro</option>
+                    </select>
+
+                    {/* Year select */}
+                    <select
+                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer min-w-[100px]"
+                      value={yearFilter}
+                      onChange={(e) => setYearFilter(e.target.value)}
+                    >
+                      <option value="all">Ano (Todos)</option>
+                      {years.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+
                     {/* Sorting select */}
                     <select
-                      className="col-span-2 px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer"
+                      className="px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none text-xs text-slate-300 focus:border-indigo-500 font-sans cursor-pointer min-w-[130px]"
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as any)}
                     >
@@ -752,6 +1064,23 @@ export default function LancamentosView({
                       <option value="amount-desc">Maior Valor (R$)</option>
                       <option value="amount-asc">Menor Valor (R$)</option>
                     </select>
+
+                    {/* Clear button if filtered */}
+                    {(typeFilter !== "all" || categoryFilter !== "all" || monthFilter !== "all" || yearFilter !== "all" || searchQuery !== "") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTypeFilter("all");
+                          setCategoryFilter("all");
+                          setMonthFilter("all");
+                          setYearFilter("all");
+                          setSearchQuery("");
+                        }}
+                        className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold rounded-xl transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" /> Limpar Filtros
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -915,6 +1244,76 @@ export default function LancamentosView({
         </div>
 
       </div>
+
+      {/* POPUP WARNING INTERCEPTOR MODAL */}
+      <AnimatePresence>
+        {showWarningModal && warningDetails && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" id="spending-limit-warning-modal">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#111111] border border-white/10 rounded-3xl p-6 max-w-md w-full text-left space-y-4 shadow-2xl relative overflow-hidden"
+            >
+              {/* Top abstract light effect */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
+              
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-2xl shrink-0 ${
+                  warningDetails.type === "daily_exceeded" || warningDetails.type === "income_deficit"
+                    ? "bg-rose-500/10 text-rose-400"
+                    : "bg-amber-500/10 text-amber-400"
+                }`}>
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-white tracking-tight">{warningDetails.title}</h3>
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider font-bold">Assistente de Disciplina Financeira</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed bg-[#050505] p-4 rounded-2xl border border-white/5 font-sans">
+                {warningDetails.description}
+              </p>
+
+              {/* Comparison stats box */}
+              <div className="grid grid-cols-2 gap-3 text-xs p-3 bg-white/[0.02] rounded-xl border border-white/5 font-mono">
+                {warningDetails.limit !== undefined && (
+                  <div>
+                    <span className="text-slate-500 text-[10px] uppercase font-bold block">Seu Limite Diário</span>
+                    <span className="text-white font-bold">R$ {warningDetails.limit.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {warningDetails.predictedIncome !== undefined && (
+                  <div>
+                    <span className="text-slate-500 text-[10px] uppercase font-bold block">Renda Prevista</span>
+                    <span className="text-white font-bold">R$ {warningDetails.predictedIncome.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-slate-500 text-[10px] uppercase font-bold block">Gasto Projetado</span>
+                  <span className="text-white font-bold">R$ {warningDetails.currentSpending?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={warningDetails.onConfirm}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer shadow-md shadow-indigo-600/10 text-center"
+                >
+                  Confirmar Lançamento
+                </button>
+                <button
+                  onClick={() => { setShowWarningModal(false); setWarningDetails(null); }}
+                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer text-center"
+                >
+                  Voltar / Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -295,6 +295,66 @@ export default function App() {
     await saveDb(updated);
   };
 
+  // 2b. Add Multiple Transactions Action
+  const handleAddTransactions = async (txList: Array<Omit<Transaction, "id">>) => {
+    if (!db) return;
+
+    let currentAccounts = [...db.accounts];
+    const newTxs: Transaction[] = [];
+    const newTimelines = [...db.timeline];
+    const newInsights = [...db.aiInsights];
+
+    txList.forEach(txData => {
+      const newTx: Transaction = {
+        ...txData,
+        id: "tx-" + Math.random().toString(36).substr(2, 9)
+      };
+      newTxs.push(newTx);
+
+      // Calculate updated balances
+      currentAccounts = currentAccounts.map(acc => {
+        if (acc.id === txData.accountId) {
+          const amt = Number(txData.amount);
+          return {
+            ...acc,
+            balance: txData.type === "expense" ? acc.balance - amt : acc.balance + amt
+          };
+        }
+        return acc;
+      });
+
+      // Create a timeline event
+      newTimelines.push({
+        id: "tl-" + Math.random().toString(36).substr(2, 9),
+        date: txData.date,
+        event: `${txData.type === "income" ? "Receita" : "Despesa"} Adicionada`,
+        impact: `${txData.description} (Categoria: ${txData.category})`,
+        financialChange: txData.type === "income" ? txData.amount : -txData.amount
+      });
+
+      // Trigger standard alert heuristics if spending is abnormal
+      if (txData.type === "expense" && txData.amount > 1000) {
+        newInsights.unshift({
+          id: "ins-" + Math.random().toString(36).substr(2, 9),
+          insight: `Nota de Gasto Excepcional: O lançamento de R$ ${txData.amount.toFixed(2)} em ${txData.description} impacta sua liquidez líquida imediata. Verifique se o valor está alinhado com seu orçamento adaptativo.`,
+          severity: "medium",
+          createdAt: new Date().toISOString().replace("T", " ").substr(0, 19),
+          relatedDomain: "Expenses"
+        });
+      }
+    });
+
+    const updated = {
+      ...db,
+      accounts: currentAccounts,
+      transactions: [...db.transactions, ...newTxs],
+      timeline: newTimelines,
+      aiInsights: newInsights
+    };
+
+    await saveDb(updated);
+  };
+
   // 2. Add Transaction Action
   const handleAddTransaction = async (txData: Omit<Transaction, "id">) => {
     if (!db) return;
@@ -372,9 +432,10 @@ export default function App() {
     // Calculate updated balances (deterministic Cap 10)
     const updatedAccounts = db.accounts.map(acc => {
       if (acc.id === txData.accountId) {
+        const amt = Number(txData.amount);
         return {
           ...acc,
-          balance: txData.type === "expense" ? acc.balance - txData.amount : acc.balance + txData.amount
+          balance: txData.type === "expense" ? acc.balance - amt : acc.balance + amt
         };
       }
       return acc;
@@ -710,40 +771,234 @@ export default function App() {
     await saveDb(updated);
   };
 
+  const handleTriggerScheduledIncome = async (item: { amount: number; name: string }) => {
+    if (!db) return;
+    const newTx: Transaction = {
+      id: "tx-sched-" + Math.random().toString(36).substr(2, 9),
+      type: "income",
+      amount: item.amount,
+      date: new Date().toISOString().split("T")[0],
+      category: "Salário",
+      accountId: "acc-1",
+      description: `Recebimento: ${item.name}`,
+      isRecurring: true
+    };
+
+    const updatedAccounts = db.accounts.map(acc => {
+      if (acc.id === "acc-1") {
+        return { ...acc, balance: acc.balance + item.amount };
+      }
+      return acc;
+    });
+
+    const updated = {
+      ...db,
+      accounts: updatedAccounts,
+      transactions: [...db.transactions, newTx]
+    };
+
+    await saveDb(updated);
+  };
+
+  const handleSaveForDream = async (goalId: string, amt: number) => {
+    if (!db) return;
+    const goal = db.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    const newTx: Transaction = {
+      id: "tx-dream-" + Math.random().toString(36).substr(2, 9),
+      type: "expense",
+      amount: amt,
+      date: new Date().toISOString().split("T")[0],
+      category: "Investimentos",
+      accountId: "acc-1",
+      description: `Aporte Sonho: ${goal.name}`,
+      isRecurring: false
+    };
+
+    const updatedAccounts = db.accounts.map(acc => {
+      if (acc.id === "acc-1") {
+        return { ...acc, balance: acc.balance - amt };
+      }
+      return acc;
+    });
+
+    const updatedGoals = db.goals.map(g => {
+      if (g.id === goalId) {
+        return { ...g, currentValue: g.currentValue + amt };
+      }
+      return g;
+    });
+
+    const updated = {
+      ...db,
+      accounts: updatedAccounts,
+      goals: updatedGoals,
+      transactions: [...db.transactions, newTx]
+    };
+
+    await saveDb(updated);
+  };
+
+  // Realistic Client-side Seed database fallback generator
+  const getClientSeedData = (userEmail: string, userName: string, userId: string): ExcelDatabase => {
+    const currentYear = new Date().getFullYear();
+    const currentDate = new Date().toISOString().split("T")[0];
+    return {
+      profile: {
+        userId: userId || "guest_user",
+        name: userName || "Paulo Henrique",
+        email: userEmail || "pauloo201113@gmail.com",
+        incomeType: "CLT",
+        payFrequency: "mensal",
+        financialGoal: "Reservas e Investimentos para Casa Própria",
+        riskProfile: "moderado",
+        onboardingCompleted: true,
+      },
+      settings: {
+        currency: "BRL",
+        language: "pt-BR",
+        notificationsEnabled: true,
+        aiEnabled: true,
+        darkMode: true,
+      },
+      accounts: [
+        { id: "acc-1", name: "Conta Corrente", bankName: "Itaú Unibanco", type: "checking", balance: 4250.00, isActive: true },
+        { id: "acc-2", name: "Reserva de Emergência", bankName: "Nubank", type: "savings", balance: 12000.00, isActive: true },
+        { id: "acc-3", name: "Carteira Dinheiro", bankName: "Dinheiro Físico", type: "wallet", balance: 250.00, isActive: true }
+      ],
+      cards: [
+        { id: "card-1", name: "Nubank Ultravioleta", limit: 8000, dueDate: 10, closingDay: 3, currentInvoice: 1845.50, availableLimit: 6154.50 }
+      ],
+      incomeSources: [
+        { id: "inc-1", name: "Salário CLT Tech", type: "CLT", frequency: "monthly", expectedValue: 6500.00, nextDate: `${currentYear}-07-05` }
+      ],
+      expenses: [
+        { id: "exp-1", name: "Aluguel Apartamento", category: "Moradia", amount: 1500.00, frequency: "monthly", dueDate: `${currentYear}-07-10`, isFixed: true },
+        { id: "exp-2", name: "Internet Fibra", category: "Serviços", amount: 120.00, frequency: "monthly", dueDate: `${currentYear}-07-15`, isFixed: true },
+        { id: "exp-3", name: "Assinatura Streaming", category: "Lazer", amount: 55.90, frequency: "monthly", dueDate: `${currentYear}-07-22`, isFixed: false }
+      ],
+      transactions: [
+        { id: "tx-1", type: "income", amount: 6500.00, date: `${currentYear}-06-05`, category: "Salário", accountId: "acc-1", description: "Salário Mensal Tech S.A.", isRecurring: true },
+        { id: "tx-2", type: "expense", amount: 1500.00, date: `${currentYear}-06-10`, category: "Moradia", accountId: "acc-1", description: "Aluguel Mensal", isRecurring: true },
+        { id: "tx-3", type: "expense", amount: 120.00, date: `${currentYear}-06-15`, category: "Serviços", accountId: "acc-1", description: "Mensalidade Internet", isRecurring: true },
+        { id: "tx-4", type: "expense", amount: 350.00, date: `${currentYear}-06-18`, category: "Alimentação", accountId: "acc-1", description: "Supermercado Semanal", isRecurring: false },
+        { id: "tx-5", type: "expense", amount: 180.00, date: `${currentYear}-06-25`, category: "Transporte", accountId: "acc-1", description: "Combustível", isRecurring: false },
+        { id: "tx-6", type: "expense", amount: 110.00, date: `${currentYear}-06-28`, category: "Alimentação", accountId: "acc-3", description: "Jantar fds", isRecurring: false }
+      ],
+      assets: [
+        { id: "ast-1", name: "Carro Honda Civic", type: "vehicle", value: 45000.00, acquisitionDate: "2024-03-15", appreciationRate: -5.0 },
+        { id: "ast-2", name: "Tesouro IPCA 2029", type: "investment", value: 8500.00, acquisitionDate: "2025-01-10", appreciationRate: 11.5 }
+      ],
+      liabilities: [
+        { id: "lia-1", name: "Financiamento Honda", type: "financing", totalValue: 30000.00, remainingValue: 12000.00, monthlyPayment: 750.00, remainingMonths: 16 }
+      ],
+      goals: [
+        { id: "goal-1", name: "Reserva de Emergência de 6 meses", targetValue: 15000.00, currentValue: 12000.00, deadline: `${currentYear}-12-31`, priority: "high", status: "active" },
+        { id: "goal-2", name: "Entrada de Imóvel Próprio", targetValue: 60000.00, currentValue: 8500.00, deadline: "2028-12-31", priority: "medium", status: "active" }
+      ],
+      cashFlow: [
+        { date: `${currentYear}-07-05`, expectedIncome: 6500, expectedExpense: 0, projectedBalance: 10750 },
+        { date: `${currentYear}-07-10`, expectedIncome: 0, expectedExpense: 1500, projectedBalance: 9250 },
+        { date: `${currentYear}-07-15`, expectedIncome: 0, expectedExpense: 120, projectedBalance: 9130 },
+        { date: `${currentYear}-07-22`, expectedIncome: 0, expectedExpense: 55.90, projectedBalance: 9074.10 }
+      ],
+      calendar: [
+        { id: "cal-1", date: `${currentYear}-07-05`, type: "income", description: "Salário CLT Tech", amount: 6500.00 },
+        { id: "cal-2", date: `${currentYear}-07-10`, type: "expense", description: "Aluguel Apartamento", amount: 1500.00 },
+        { id: "cal-3", date: `${currentYear}-07-15`, type: "expense", description: "Internet Fibra", amount: 120.00 }
+      ],
+      timeline: [
+        { id: "tl-1", date: "2026-01-01", event: "Início da Organização Financeira", impact: "Criação de plano consolidado", financialChange: 0 }
+      ],
+      events: [
+        { id: "evt-1", type: "milestone", description: "Meta Nubank Reserva bateu 80%", date: `${currentYear}-06-20`, financialImpact: 0 }
+      ],
+      aiInsights: [
+        {
+          id: "ins-1",
+          insight: "Parabéns! Sua Reserva de Emergência já cobre cerca de 5 meses das suas despesas fixas. Mantenha o foco para atingir a meta de 6 meses (R$ 15.000).",
+          severity: "low",
+          createdAt: `${currentDate} 10:00:00`,
+          relatedDomain: "Goals"
+        },
+        {
+          id: "ins-2",
+          insight: "Alerta: O Nubank Ultravioleta vencerá no dia 10 de julho (R$ 1.845,50). Certifique-se de que o saldo na conta corrente esteja livre para o pagamento da fatura.",
+          severity: "medium",
+          createdAt: `${currentDate} 10:05:00`,
+          relatedDomain: "Cards"
+        }
+      ]
+    };
+  };
+
   // Reset Excel database to factory seed
   const handleResetDatabase = async () => {
     setLoading(true);
+    let seedDb: ExcelDatabase | null = null;
     try {
       const res = await fetch("/api/db/reset", {
         method: "POST"
       });
       if (res.ok) {
         const resetResult = await res.json();
-        let seedDb = resetResult.db as ExcelDatabase;
-        if (db) {
-          // Preserve the user's specific identity details, custom goals, and settings
-          seedDb = {
-            ...seedDb,
-            profile: {
-              ...seedDb.profile,
-              userId: db.profile.userId,
-              name: db.profile.name,
-              email: db.profile.email,
-              incomeType: db.profile.incomeType,
-              payFrequency: db.profile.payFrequency,
-              financialGoal: db.profile.financialGoal,
-              riskProfile: db.profile.riskProfile,
-              onboardingCompleted: db.profile.onboardingCompleted
-            },
-            settings: {
-              ...seedDb.settings,
-              ...db.settings
-            }
-          };
+        seedDb = resetResult.db as ExcelDatabase;
+      }
+    } catch (err) {
+      console.warn("API de reset falhou, usando gerador resiliente local.");
+    }
+
+    try {
+      // Fallback if API was unreachable or failed
+      if (!seedDb) {
+        seedDb = getClientSeedData(
+          db?.profile?.email || "pauloo201113@gmail.com",
+          db?.profile?.name || "Paulo Henrique",
+          db?.profile?.userId || "guest_user"
+        );
+      }
+
+      if (db && seedDb) {
+        // Preserve the user's specific identity details, custom goals, and settings
+        seedDb = {
+          ...seedDb,
+          profile: {
+            ...seedDb.profile,
+            userId: db.profile.userId,
+            name: db.profile.name,
+            email: db.profile.email,
+            incomeType: db.profile.incomeType,
+            payFrequency: db.profile.payFrequency,
+            financialGoal: db.profile.financialGoal,
+            riskProfile: db.profile.riskProfile,
+            onboardingCompleted: db.profile.onboardingCompleted
+          },
+          settings: {
+            ...seedDb.settings,
+            ...db.settings
+          }
+        };
+
+        // Clear local storage settings and envelopes to keep UI in perfect sync
+        localStorage.removeItem(`financeai_schedules_${db.profile.email}`);
+        localStorage.removeItem(`financeai_envelopes_${db.profile.email}`);
+        const currentMonthStr = new Date().toISOString().substring(0, 7);
+        localStorage.removeItem(`financeai_dream_prompt_${db.profile.email}_${currentMonthStr}`);
+        
+        // Remove individual schedule registration indicators
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("financeai_sched_registered_")) {
+            localStorage.removeItem(key);
+            i--; // adjust index since we deleted an item
+          }
         }
+      }
+
+      if (seedDb) {
         await saveDb(seedDb);
-      } else {
-        throw new Error("Erro de resposta do servidor no reset.");
+        alert("Sua base de simulação foi restaurada com sucesso para o padrão do Paulo Henrique!");
       }
     } catch (err) {
       console.error("Erro ao resetar o banco de dados:", err);
@@ -971,12 +1226,15 @@ export default function App() {
                   onSimulateGasto={handleSimulateGasto}
                   onEditGoal={handleEditGoal}
                   onEditAccount={handleEditAccount}
+                  onTriggerScheduledIncome={handleTriggerScheduledIncome}
+                  onSaveForDream={handleSaveForDream}
                 />
               )}
               {activeTab === "lancamentos" && (
                 <LancamentosView 
                   data={db} 
                   onAddTransaction={handleAddTransaction}
+                  onAddTransactions={handleAddTransactions}
                   onDeleteTransaction={handleDeleteTransaction}
                   onEditTransaction={handleEditTransaction}
                 />
@@ -1022,7 +1280,23 @@ export default function App() {
                   firebaseUser={firebaseUser}
                   onLoginFirebase={handleLoginGoogleFirebase}
                   onLogoutFirebase={handleLogoutFirebase}
-                  onUpdateProfile={(p) => saveDb({ ...db, profile: { ...db.profile, ...p } })}
+                  onUpdateProfile={(p) => {
+                    const { expectedIncome, ...profileData } = p;
+                    let updatedIncomeSources = db.incomeSources;
+                    if (expectedIncome !== undefined) {
+                      updatedIncomeSources = db.incomeSources.map(inc => {
+                        if (inc.id === "inc-1") {
+                          return { ...inc, expectedValue: expectedIncome };
+                        }
+                        return inc;
+                      });
+                    }
+                    saveDb({
+                      ...db,
+                      profile: { ...db.profile, ...profileData },
+                      incomeSources: updatedIncomeSources
+                    });
+                  }}
                   onUpdateSettings={(s) => saveDb({ ...db, settings: { ...db.settings, ...s } })}
                   onResetDatabase={handleResetDatabase}
                 />

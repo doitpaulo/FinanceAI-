@@ -19,6 +19,8 @@ interface DashboardProps {
   onSimulateGasto: (amount: number, description: string) => void;
   onEditGoal?: (id: string, goalData: Partial<Goal>) => void;
   onEditAccount?: (id: string, updatedData: Partial<Account>) => void;
+  onTriggerScheduledIncome?: (item: any) => Promise<void> | void;
+  onSaveForDream?: (goalId: string, amt: number) => Promise<void> | void;
 }
 
 interface Envelope {
@@ -42,7 +44,9 @@ export default function Dashboard({
   onAddTransaction, 
   onSimulateGasto,
   onEditGoal,
-  onEditAccount 
+  onEditAccount,
+  onTriggerScheduledIncome,
+  onSaveForDream
 }: DashboardProps) {
   const [activeSubTab, setActiveSubTab] = useState<"radar" | "simulador" | "caixinhas" | "renda">("radar");
   const today = new Date();
@@ -69,24 +73,48 @@ export default function Dashboard({
     return savedStatus !== "done" && savedStatus !== "dismissed";
   });
 
-  const [schedules, setSchedules] = useState<ScheduledIncome[]>(() => {
-    const saved = localStorage.getItem(`financeai_schedules_${data.profile.email}`);
-    if (saved) return JSON.parse(saved);
-    const expectedVal = data.incomeSources[0]?.expectedValue || 1600;
-    return [
-      { id: "sched-1", name: "Meu Salário (5º Dia Útil)", amount: Math.round(expectedVal * 0.6), ruleType: "quinto_dia_util" },
-      { id: "sched-2", name: "Vale (Dia 20)", amount: Math.round(expectedVal * 0.4), ruleType: "dia_20" }
-    ];
-  });
+  const [schedules, setSchedules] = useState<ScheduledIncome[]>([]);
+
+  // Payday prompt state
+  const [activePaydayPrompt, setActivePaydayPrompt] = useState<ScheduledIncome | null>(null);
+  const [paydayPromptAmount, setPaydayPromptAmount] = useState("");
+
+  const getScheduledDay = (sched: ScheduledIncome): number => {
+    if (sched.ruleType === "quinto_dia_util") {
+      return 5;
+    }
+    if (sched.ruleType === "dia_20") {
+      return 20;
+    }
+    if (sched.ruleType === "dia_especifico" && sched.specificDay) {
+      return sched.specificDay;
+    }
+    return 5;
+  };
+
+  useEffect(() => {
+    if (!schedules || schedules.length === 0) return;
+    const todayDay = today.getDate();
+    
+    const pending = schedules.find(sched => {
+      const scheduledDay = getScheduledDay(sched);
+      const isPaid = localStorage.getItem(`financeai_sched_registered_${sched.id}_${currentMonthStr}`) === "true";
+      const isDismissedThisSession = sessionStorage.getItem(`financeai_sched_dismissed_session_${sched.id}`) === "true";
+      return todayDay >= scheduledDay && !isPaid && !isDismissedThisSession;
+    });
+
+    if (pending) {
+      setActivePaydayPrompt(pending);
+      setPaydayPromptAmount(pending.amount.toString());
+    } else {
+      setActivePaydayPrompt(null);
+    }
+  }, [schedules, today, currentMonthStr]);
 
   const [schedName, setSchedName] = useState("");
   const [schedAmount, setSchedAmount] = useState("");
   const [schedRule, setSchedRule] = useState<"quinto_dia_util" | "dia_20" | "dia_especifico">("quinto_dia_util");
   const [schedDay, setSchedDay] = useState("10");
-
-  useEffect(() => {
-    localStorage.setItem(`financeai_schedules_${data.profile.email}`, JSON.stringify(schedules));
-  }, [schedules, data.profile.email]);
 
   // Math Core
   const totalAccountsBalance = data.accounts.reduce((sum, acc) => sum + (acc.isActive ? acc.balance : 0), 0);
@@ -108,10 +136,56 @@ export default function Dashboard({
     { id: "env-8", name: "Meta de Emergência", category: "Investimentos", balance: 0, icon: "🛡️" }
   ];
 
-  const [envelopes, setEnvelopes] = useState<Envelope[]>(() => {
-    const saved = localStorage.getItem(`financeai_envelopes_${data.profile.email}`);
-    return saved ? JSON.parse(saved) : defaultEnvelopes;
-  });
+  const [envelopes, setEnvelopes] = useState<Envelope[]>([]);
+
+  // Sync schedules and envelopes when data.profile.email or data.incomeSources changes
+  useEffect(() => {
+    const expectedVal = data.incomeSources[0]?.expectedValue || 1600;
+    const savedSchedules = localStorage.getItem(`financeai_schedules_${data.profile.email}`);
+    if (savedSchedules) {
+      try {
+        const parsed = JSON.parse(savedSchedules);
+        const lastExpected = parseFloat(localStorage.getItem(`financeai_expected_val_${data.profile.email}`) || "0");
+        if (lastExpected > 0 && lastExpected !== expectedVal) {
+          const ratio = expectedVal / lastExpected;
+          const scaled = parsed.map((s: any) => ({
+            ...s,
+            amount: Math.round(s.amount * ratio)
+          }));
+          setSchedules(scaled);
+          localStorage.setItem(`financeai_schedules_${data.profile.email}`, JSON.stringify(scaled));
+        } else {
+          setSchedules(parsed);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      setSchedules([
+        { id: "sched-1", name: "Meu Salário (5º Dia Útil)", amount: Math.round(expectedVal * 0.6), ruleType: "quinto_dia_util" },
+        { id: "sched-2", name: "Vale (Dia 20)", amount: Math.round(expectedVal * 0.4), ruleType: "dia_20" }
+      ]);
+    }
+    localStorage.setItem(`financeai_expected_val_${data.profile.email}`, expectedVal.toString());
+
+    const savedEnvelopes = localStorage.getItem(`financeai_envelopes_${data.profile.email}`);
+    if (savedEnvelopes) {
+      try {
+        setEnvelopes(JSON.parse(savedEnvelopes));
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      setEnvelopes(defaultEnvelopes);
+    }
+  }, [data.profile.email, data.incomeSources]);
+
+  // Save schedules when they change
+  useEffect(() => {
+    if (schedules && schedules.length > 0) {
+      localStorage.setItem(`financeai_schedules_${data.profile.email}`, JSON.stringify(schedules));
+    }
+  }, [schedules, data.profile.email]);
 
   const saveEnvelopes = (updated: Envelope[]) => {
     setEnvelopes(updated);
@@ -121,28 +195,31 @@ export default function Dashboard({
   const totalAllocatedEnvelopes = envelopes.reduce((sum, env) => sum + env.balance, 0);
   const unallocatedBalance = Math.max(0, netCashBalance - totalAllocatedEnvelopes);
 
-  // Radar calculations
-  const next15Days = new Date();
-  next15Days.setDate(today.getDate() + 15);
-  const billsIn15DaysList = (data.expenses || []).filter(exp => !exp.paid && new Date(exp.dueDate) <= next15Days);
+  // Radar calculations based on riskProfile setting (Conservador = 30 days, Agressivo = 7 days, Moderado = 15 days)
+  const riskProfile = data.profile.riskProfile || "moderado";
+  const daysThreshold = riskProfile === "conservador" ? 30 : riskProfile === "agressivo" ? 7 : 15;
+
+  const nextDays = new Date();
+  nextDays.setDate(today.getDate() + daysThreshold);
+  const billsIn15DaysList = (data.expenses || []).filter(exp => !exp.paid && new Date(exp.dueDate) <= nextDays);
   const billsIn15DaysSum = billsIn15DaysList.reduce((sum, exp) => sum + exp.amount, 0);
 
   // Risk & Advice
   let riskLevel = "low";
   let riskText = "Risco Baixo";
   let riskColor = "text-emerald-400 border-emerald-500/20 bg-emerald-950/10";
-  let riskAdvice = "Suas contas dos próximos 15 dias estão bem cobertas pelo seu dinheiro disponível livre hoje. Ótimo trabalho!";
+  let riskAdvice = `Suas contas dos próximos ${daysThreshold} dias estão bem cobertas pelo seu dinheiro disponível livre hoje. Ótimo trabalho!`;
 
   if (netCashBalance < billsIn15DaysSum) {
     riskLevel = "critical";
     riskText = "Risco Crítico";
     riskColor = "text-rose-400 border-rose-500/20 bg-rose-950/20";
-    riskAdvice = "Seu saldo livre hoje não cobre as contas dos próximos 15 dias! Cuidado redobrado: evite novos gastos e garanta o básico.";
+    riskAdvice = `Seu saldo livre hoje não cobre as contas dos próximos ${daysThreshold} dias! Cuidado redobrado: evite novos gastos e garanta o básico.`;
   } else if (netCashBalance < billsIn15DaysSum * 1.25) {
     riskLevel = "medium";
     riskText = "Risco Moderado";
     riskColor = "text-amber-400 border-amber-500/20 bg-amber-950/20";
-    riskAdvice = "Você tem o suficiente, mas com pouca folga. Tente não fazer compras supérfluas nos próximos dias.";
+    riskAdvice = `Você tem o suficiente para os próximos ${daysThreshold} dias, mas com pouca folga. Tente não fazer compras supérfluas nos próximos dias.`;
   }
 
   // Auto Plan
@@ -241,22 +318,26 @@ export default function Dashboard({
       return;
     }
 
-    onAddTransaction({
-      type: "expense",
-      amount: amt,
-      date: today.toISOString().split("T")[0],
-      category: "Investimentos",
-      accountId: "acc-1",
-      description: `Aporte Sonho: ${target.name}`,
-      isRecurring: false
-    });
+    if (onSaveForDream) {
+      onSaveForDream(target.id, amt);
+    } else {
+      onAddTransaction({
+        type: "expense",
+        amount: amt,
+        date: today.toISOString().split("T")[0],
+        category: "Investimentos",
+        accountId: "acc-1",
+        description: `Aporte Sonho: ${target.name}`,
+        isRecurring: false
+      });
 
-    if (onEditGoal) {
-      onEditGoal(target.id, { currentValue: target.currentValue + amt });
-    }
-    if (onEditAccount) {
-      const checking = data.accounts.find(a => a.id === "acc-1");
-      if (checking) onEditAccount("acc-1", { balance: checking.balance - amt });
+      if (onEditGoal) {
+        onEditGoal(target.id, { currentValue: target.currentValue + amt });
+      }
+      if (onEditAccount) {
+        const checking = data.accounts.find(a => a.id === "acc-1");
+        if (checking) onEditAccount("acc-1", { balance: checking.balance - amt });
+      }
     }
 
     localStorage.setItem(`financeai_dream_prompt_${data.profile.email}_${currentMonthStr}`, "done");
@@ -266,24 +347,49 @@ export default function Dashboard({
 
   // Scheduled Paydays
   const handleTriggerScheduledIncome = (item: ScheduledIncome) => {
-    onAddTransaction({
-      type: "income",
-      amount: item.amount,
-      date: today.toISOString().split("T")[0],
-      category: "Salário",
-      accountId: "acc-1",
-      description: `Recebimento: ${item.name}`,
-      isRecurring: true
-    });
+    if (onTriggerScheduledIncome) {
+      onTriggerScheduledIncome(item);
+    } else {
+      onAddTransaction({
+        type: "income",
+        amount: item.amount,
+        date: today.toISOString().split("T")[0],
+        category: "Salário",
+        accountId: "acc-1",
+        description: `Recebimento: ${item.name}`,
+        isRecurring: true
+      });
 
-    if (onEditAccount) {
-      const checking = data.accounts.find(a => a.id === "acc-1");
-      if (checking) onEditAccount("acc-1", { balance: checking.balance + item.amount });
+      if (onEditAccount) {
+        const checking = data.accounts.find(a => a.id === "acc-1");
+        if (checking) onEditAccount("acc-1", { balance: checking.balance + item.amount });
+      }
     }
 
     localStorage.setItem(`financeai_sched_registered_${item.id}_${currentMonthStr}`, "true");
     setSchedules([...schedules]);
     alert(`🎉 Sucesso! R$ ${item.amount.toLocaleString("pt-BR")} depositados na sua conta.`);
+  };
+
+  const handleConfirmPayday = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activePaydayPrompt) return;
+    const amt = parseFloat(paydayPromptAmount);
+    if (isNaN(amt) || amt <= 0) return;
+
+    const updatedSchedule = {
+      ...activePaydayPrompt,
+      amount: amt
+    };
+
+    handleTriggerScheduledIncome(updatedSchedule);
+    setActivePaydayPrompt(null);
+  };
+
+  const handleDismissPayday = () => {
+    if (!activePaydayPrompt) return;
+    sessionStorage.setItem(`financeai_sched_dismissed_session_${activePaydayPrompt.id}`, "true");
+    setActivePaydayPrompt(null);
   };
 
   const handleCreateSchedule = (e: React.FormEvent) => {
@@ -369,6 +475,42 @@ export default function Dashboard({
         </div>
       )}
 
+      {/* PAYDAY INCOME PROMPTER */}
+      {activePaydayPrompt && (
+        <div className="bg-gradient-to-r from-emerald-950/30 to-[#111111] border border-emerald-500/25 rounded-3xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-left shadow-lg" id="payday-income-prompt">
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5" /> Recebimento de Renda Agendada
+            </span>
+            <h3 className="text-sm font-bold text-white">Você já recebeu seu pagamento de "{activePaydayPrompt.name}" este mês?</h3>
+            <p className="text-xs text-slate-400">Ajude o FinanceAI a manter seu controle atualizado confirmando o valor recebido.</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <div className="flex bg-[#050505] px-2.5 py-1.5 rounded-xl border border-white/10 text-xs w-28 font-mono">
+              <span className="text-slate-500 mr-1">R$</span>
+              <input 
+                type="number" 
+                className="bg-transparent text-white outline-none w-full font-bold" 
+                value={paydayPromptAmount} 
+                onChange={(e) => setPaydayPromptAmount(e.target.value)} 
+              />
+            </div>
+            <button 
+              onClick={handleConfirmPayday} 
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase cursor-pointer transition shadow"
+            >
+              Sim, Recebi
+            </button>
+            <button 
+              onClick={handleDismissPayday} 
+              className="px-3 py-2 bg-white/5 text-slate-400 hover:text-white rounded-xl text-xs cursor-pointer transition font-semibold"
+            >
+              Depois
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MONTHLY DREAM SAVING PROMPTER */}
       {showDreamPopup && activeGoals.length > 0 && !dreamSavedThisSession && (
         <div className="bg-gradient-to-r from-indigo-950/30 to-[#111111] border border-indigo-500/20 rounded-3xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-left" id="monthly-dream-popup">
@@ -418,7 +560,11 @@ export default function Dashboard({
             { id: "radar", label: "Radar & Plano", icon: <Compass className="w-3.5 h-3.5" /> },
             { id: "simulador", label: "Simulador de Decisão", icon: <HelpCircle className="w-3.5 h-3.5" /> },
             { id: "caixinhas", label: "Caixinhas (Guardar)", icon: <Coins className="w-3.5 h-3.5" /> },
-            { id: "renda", label: "Rendas & CLT/Vale", icon: <Briefcase className="w-3.5 h-3.5" /> }
+            { 
+              id: "renda", 
+              label: data.profile.incomeType === "CLT" ? "Rendas & CLT/Vale" : data.profile.incomeType === "variavel" ? "Ganhos & Autônomo" : "Rendas Mistas", 
+              icon: <Briefcase className="w-3.5 h-3.5" /> 
+            }
           ].map((tab) => (
             <button
               id={`subtab-${tab.id}`}
@@ -442,7 +588,7 @@ export default function Dashboard({
               {activeSubTab === "radar" && (
                 <div className="space-y-5" id="radar-subtab-panel">
                   <div className={`p-4 rounded-2xl border text-left text-xs ${riskColor}`} id="radar-risk-box">
-                    <div className="font-bold mb-1">Risco Próximos 15 Dias: {riskText}</div>
+                    <div className="font-bold mb-1">Risco Próximos {daysThreshold} Dias ({riskProfile.toUpperCase()}): {riskText}</div>
                     <p className="text-slate-300">Contas a pagar até lá: <strong>R$ {billsIn15DaysSum.toLocaleString("pt-BR")}</strong>. Saldo disponível livre: <strong>R$ {netCashBalance.toLocaleString("pt-BR")}</strong>.</p>
                     <p className="text-slate-400 mt-1 italic"><strong>Dica do assistente:</strong> {riskAdvice}</p>
                   </div>
@@ -614,7 +760,13 @@ export default function Dashboard({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
                     <div className="space-y-3 bg-[#050505] p-4 rounded-2xl border border-white/5">
                       <h4 className="font-bold text-white flex justify-between">
-                        <span>🗓️ Agendados (CLT / Vale)</span>
+                        <span>
+                          {data.profile.incomeType === "CLT" 
+                            ? "🗓️ Agendados (CLT / Vale)" 
+                            : data.profile.incomeType === "variavel" 
+                            ? "🗓️ Projeções de Ganhos" 
+                            : "🗓️ Recebimentos (Fixo e Misto)"}
+                        </span>
                         <span className="font-mono text-[9px] text-indigo-400">{currentMonthStr}</span>
                       </h4>
                       <div className="space-y-2">
