@@ -212,6 +212,28 @@ export default function App() {
     }
   };
 
+  // Helper to check if any credit card is due within the next 3 days (inclusive) with currentInvoice > 0
+  const hasNearCardDueDate = () => {
+    if (!db || !db.cards) return false;
+    const today = new Date();
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    return db.cards.some(card => {
+      const year = today.getFullYear();
+      const month = today.getMonth();
+      let dueDateObj = new Date(year, month, card.dueDate);
+      
+      if (dueDateObj < todayDateOnly) {
+        dueDateObj = new Date(year, month + 1, card.dueDate);
+      }
+      
+      const diffTime = dueDateObj.getTime() - todayDateOnly.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      return diffDays >= 0 && diffDays <= 3 && card.currentInvoice > 0;
+    });
+  };
+
   // 1. Onboarding completion callback
   const handleOnboardingComplete = async (onboardingData: OnboardingData) => {
     if (!db) return;
@@ -1143,7 +1165,10 @@ export default function App() {
                 }`}
               >
                 {tab.icon}
-                {tab.label}
+                <span className="flex-1 text-left">{tab.label}</span>
+                {tab.id === "fluxo" && hasNearCardDueDate() && (
+                  <AlertCircle className="w-4 h-4 text-amber-500 animate-pulse shrink-0" title="Vencimento de fatura de cartão nos próximos 3 dias!" />
+                )}
               </button>
             ))}
           </nav>
@@ -1349,13 +1374,18 @@ export default function App() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition cursor-pointer ${
+            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition cursor-pointer relative ${
               activeTab === tab.id
                 ? "text-indigo-400 font-bold"
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            {tab.icon}
+            <div className="relative flex items-center justify-center">
+              {tab.icon}
+              {tab.id === "fluxo" && hasNearCardDueDate() && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse border border-[#111111]" />
+              )}
+            </div>
             <span className="text-[10px] mt-1 font-semibold">{tab.label}</span>
           </button>
         ))}
