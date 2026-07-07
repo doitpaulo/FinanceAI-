@@ -314,8 +314,20 @@ export default function LancamentosView({
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || errorData.details || "Erro desconhecido ao processar extrato.");
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || errorData.details || "Erro desconhecido ao processar extrato.");
+          } else {
+            const rawText = await response.text();
+            throw new Error(rawText || `Erro do servidor (status ${response.status})`);
+          }
+        }
+
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const rawText = await response.text();
+          throw new Error(`Resposta do servidor não está em formato JSON: ${rawText.substring(0, 100)}`);
         }
 
         const data = await response.json();

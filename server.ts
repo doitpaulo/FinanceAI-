@@ -17,7 +17,8 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 // Path for simulated database (Use OS temporary directory on Vercel/Serverless to avoid read-only filesystem issues)
 const SIM_DB_PATH = process.env.VERCEL
