@@ -76,8 +76,24 @@ export function calculateFinancialScore(data: ExcelDatabase): number {
 export function calculateProjectedCashflow(data: ExcelDatabase, netCashBalance: number): number {
   if (!data) return netCashBalance;
 
-  const expectedIncomes = (data.incomeSources || []).reduce((sum, inc) => sum + inc.expectedValue, 0);
-  const expectedExpenses = (data.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+  // Obter o mês atual no formato YYYY-MM
+  const currentMonthStr = new Date().toISOString().substring(0, 7);
 
-  return netCashBalance + expectedIncomes - expectedExpenses;
+  // Somar as receitas que o usuário de fato já recebeu este mês
+  const actualIncomesThisMonth = (data.transactions || [])
+    .filter(t => t.type === "income" && t.date.startsWith(currentMonthStr))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // Total das receitas previstas configuradas
+  const totalExpectedIncomes = (data.incomeSources || []).reduce((sum, inc) => sum + inc.expectedValue, 0);
+
+  // A receita que ainda se espera receber é o total previsto menos o que já foi recebido
+  const remainingExpectedIncomes = Math.max(0, totalExpectedIncomes - actualIncomesThisMonth);
+
+  // Somar apenas as despesas/contas previstas que ainda não foram pagas
+  const unpaidExpectedExpenses = (data.expenses || [])
+    .filter(exp => !exp.paid)
+    .reduce((sum, exp) => sum + exp.amount, 0);
+
+  return netCashBalance + remainingExpectedIncomes - unpaidExpectedExpenses;
 }

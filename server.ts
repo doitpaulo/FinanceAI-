@@ -797,9 +797,9 @@ Como posso ajudar você a planejar suas metas hoje?`;
 
 // Real AI PDF Bank Statement Parsing Endpoint using Gemini 3.5-flash
 app.post("/api/ai/parse-statement", async (req, res) => {
-  const { fileBase64, fileName } = req.body;
-  if (!fileBase64) {
-    res.status(400).json({ error: "Arquivo base64 ausente ou inválido." });
+  const { fileBase64, fileName, text } = req.body;
+  if (!fileBase64 && !text) {
+    res.status(400).json({ error: "Arquivo base64 ou texto do extrato ausente ou inválido." });
     return;
   }
 
@@ -810,7 +810,12 @@ app.post("/api/ai/parse-statement", async (req, res) => {
   }
 
   try {
-    const prompt = `Analise atentamente o extrato bancário em formato PDF em anexo. 
+    const isTextMode = !!text;
+    const documentSource = isTextMode 
+      ? `Analise atentamente o texto a seguir, que foi extraído/copiado de um extrato bancário:\n\n${text}`
+      : `Analise atentamente o extrato bancário em formato PDF em anexo.`;
+
+    const prompt = `${documentSource}
 Extraia TODOS os lançamentos de transações contidos na tabela ou lista de lançamentos do extrato (ignore saldos anteriores, resumos de crédito/débito, cabeçalhos, rodapés e outras informações gerais).
 
 Regras de Extração e Conversão:
@@ -839,20 +844,23 @@ Regras de Extração e Conversão:
 
 Retorne uma lista estruturada como um array JSON de objetos contendo exatamente esses atributos.`;
 
+    const parts: any[] = [];
+    if (isTextMode) {
+      parts.push({ text: prompt });
+    } else {
+      parts.push({
+        inlineData: {
+          mimeType: "application/pdf",
+          data: fileBase64
+        }
+      });
+      parts.push({ text: prompt });
+    }
+
     const response = await aiClient.models.generateContent({
       model: "gemini-3.5-flash",
       contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: "application/pdf",
-              data: fileBase64
-            }
-          },
-          {
-            text: prompt
-          }
-        ]
+        parts
       },
       config: {
         responseMimeType: "application/json",

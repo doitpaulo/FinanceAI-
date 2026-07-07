@@ -47,6 +47,10 @@ export default function LancamentosView({
   }>>([]);
   const [importSuccessCount, setImportSuccessCount] = useState<number | null>(null);
 
+  // Paste text import states
+  const [pdfSubMode, setPdfSubMode] = useState<"upload" | "paste">("upload");
+  const [pastedText, setPastedText] = useState("");
+
   // Manual Transaction Form State
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
@@ -339,7 +343,7 @@ export default function LancamentosView({
         }
       } catch (err: any) {
         console.error("Erro na leitura/processamento do extrato:", err);
-        alert(`Não foi possível extrair dados do extrato: ${err.message}`);
+        alert(`Não foi possível extrair dados do extrato: ${err.message}\n\nDica sugerida: Se o arquivo PDF for muito pesado, tiver imagens escaneadas ou der erro de limite de processamento do servidor (Vercel), utilize a nova aba "Copiar e Colar Texto" ao lado para obter um processamento instantâneo e 100% confiável.`);
         setImportingState("idle");
         setStatementFile(null);
       }
@@ -352,6 +356,52 @@ export default function LancamentosView({
     };
 
     reader.readAsDataURL(file);
+  };
+
+  // Parses plain text copy-pasted from bank statement or website
+  const parsePastedText = async () => {
+    if (!pastedText.trim()) {
+      alert("Por favor, cole o texto do seu extrato bancário primeiro.");
+      return;
+    }
+    setImportingState("parsing");
+    setImportSuccessCount(null);
+
+    try {
+      const response = await fetch("/api/ai/parse-statement", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: pastedText
+        }),
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.details || "Erro desconhecido ao processar o extrato.");
+        } else {
+          const rawText = await response.text();
+          throw new Error(rawText || `Erro do servidor (status ${response.status})`);
+        }
+      }
+
+      const data = await response.json();
+      if (data.success && Array.isArray(data.transactions)) {
+        setParsedTransactions(data.transactions);
+        setImportingState("parsed");
+        setPastedText("");
+      } else {
+        throw new Error("Resposta de processamento inválida do servidor.");
+      }
+    } catch (err: any) {
+      console.error("Erro no processamento do texto colado:", err);
+      alert(`Não foi possível extrair dados do texto: ${err.message}\n\nDica: Se o texto for muito longo, tente copiar e colar em partes menores para evitar limites de processamento do servidor.`);
+      setImportingState("idle");
+    }
   };
 
   // Commits the selected items from statement to the persistent database
@@ -738,99 +788,158 @@ export default function LancamentosView({
                 transition={{ duration: 0.15 }}
                 className="space-y-3"
               >
-                <h3 className="text-xs font-mono text-slate-500 uppercase tracking-widest font-bold text-left pl-1">Leitor de Extrato Inteligente</h3>
+                <div className="flex items-center justify-between pl-1">
+                  <h3 className="text-xs font-mono text-slate-500 uppercase tracking-widest font-bold">Leitor de Extrato Inteligente</h3>
+                  <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-mono rounded-full font-bold uppercase tracking-wider">Com IA</span>
+                </div>
                 
                 <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 space-y-4 text-left shadow-lg">
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold text-white">Extraia lançamentos instantaneamente</p>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Envie o arquivo PDF do extrato bancário para que nosso algoritmo identifique valores e preencha automaticamente.
-                    </p>
-                  </div>
-
-                  {/* Drop zone / selector */}
-                  <div 
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file && file.type === "application/pdf") {
-                        setStatementFile(file);
-                        parseRealPdf(file);
-                      } else {
-                        alert("Por favor, envie um arquivo em formato PDF.");
-                      }
-                    }}
-                    className="border border-dashed border-white/10 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-indigo-950/5 transition duration-300 flex flex-col items-center justify-center text-center space-y-3 cursor-pointer"
-                    onClick={() => document.getElementById("main-pdf-upload")?.click()}
-                  >
-                    <div className="p-3 bg-indigo-500/10 rounded-full text-indigo-400">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-[11px] font-bold text-white">Clique ou arraste o arquivo aqui</p>
-                      <p className="text-[9px] text-slate-500">Formato PDF apenas (.pdf)</p>
-                    </div>
-                    <input 
-                      type="file" 
-                      accept=".pdf" 
-                      id="main-pdf-upload"
-                      className="hidden" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setStatementFile(file);
-                          if (file.size > 0) {
-                            parseRealPdf(file);
-                          } else {
-                            triggerPdfSimulation(file.name);
-                          }
-                        }
-                      }}
-                    />
-                    <button 
+                  {/* Sub-tabs for PDF Upload vs. Paste Text */}
+                  <div className="flex bg-[#050505] p-1 border border-white/5 rounded-2xl">
+                    <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        document.getElementById("main-pdf-upload")?.click();
-                      }}
-                      className="px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white text-indigo-400 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                      onClick={() => setPdfSubMode("upload")}
+                      className={`flex-1 py-1.5 rounded-xl text-[10px] font-bold transition text-center cursor-pointer ${
+                        pdfSubMode === "upload" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                      }`}
                     >
-                      Selecionar Arquivo
+                      Subir PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPdfSubMode("paste")}
+                      className={`flex-1 py-1.5 rounded-xl text-[10px] font-bold transition text-center cursor-pointer ${
+                        pdfSubMode === "paste" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Copiar e Colar Texto
                     </button>
                   </div>
 
-                  {/* Simulation Helpers */}
-                  <div className="p-4 bg-[#050505] border border-white/5 rounded-2xl space-y-3">
-                    <span className="text-[9px] font-mono text-indigo-400 uppercase tracking-wider font-bold block">Experimentar Sem Arquivo (Simular)</span>
-                    <p className="text-[10px] text-slate-500 leading-relaxed">
-                      Selecione um dos emuladores bancários prontos abaixo para testar a captura:
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setStatementFile(new File([], "nubank_julho_2026.pdf"));
-                          triggerPdfSimulation("nubank_julho_2026.pdf");
+                  {pdfSubMode === "upload" ? (
+                    <>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-white">Extraia lançamentos instantaneamente</p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Envie o arquivo PDF do extrato bancário para que nosso algoritmo identifique valores e preencha automaticamente.
+                        </p>
+                      </div>
+
+                      {/* Drop zone / selector */}
+                      <div 
+                        onDragOver={(e) => {
+                          e.preventDefault();
                         }}
-                        className="py-1.5 px-2 bg-indigo-950/5 hover:bg-indigo-950/20 border border-purple-500/20 hover:border-purple-500/50 rounded-xl text-left transition text-[10px] truncate block text-purple-300 font-bold"
-                      >
-                        💜 NuBank PDF
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setStatementFile(new File([], "itau_personalite.pdf"));
-                          triggerPdfSimulation("itau_personalite.pdf");
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files?.[0];
+                          if (file && file.type === "application/pdf") {
+                            setStatementFile(file);
+                            parseRealPdf(file);
+                          } else {
+                            alert("Por favor, envie um arquivo em formato PDF.");
+                          }
                         }}
-                        className="py-1.5 px-2 bg-indigo-950/5 hover:bg-indigo-950/20 border border-sky-500/20 hover:border-sky-500/50 rounded-xl text-left transition text-[10px] truncate block text-sky-300 font-bold"
+                        className="border border-dashed border-white/10 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-indigo-950/5 transition duration-300 flex flex-col items-center justify-center text-center space-y-3 cursor-pointer"
+                        onClick={() => document.getElementById("main-pdf-upload")?.click()}
                       >
-                        🧡 Itaú PDF
+                        <div className="p-3 bg-indigo-500/10 rounded-full text-indigo-400">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-[11px] font-bold text-white">Clique ou arraste o arquivo aqui</p>
+                          <p className="text-[9px] text-slate-500">Formato PDF apenas (.pdf)</p>
+                        </div>
+                        <input 
+                          type="file" 
+                          accept=".pdf" 
+                          id="main-pdf-upload"
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setStatementFile(file);
+                              if (file.size > 0) {
+                                parseRealPdf(file);
+                              } else {
+                                triggerPdfSimulation(file.name);
+                              }
+                            }
+                          }}
+                        />
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            document.getElementById("main-pdf-upload")?.click();
+                          }}
+                          className="px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white text-indigo-400 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                        >
+                          Selecionar Arquivo
+                        </button>
+                      </div>
+
+                      {/* Simulation Helpers */}
+                      <div className="p-4 bg-[#050505] border border-white/5 rounded-2xl space-y-3">
+                        <span className="text-[9px] font-mono text-indigo-400 uppercase tracking-wider font-bold block">Experimentar Sem Arquivo (Simular)</span>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                          Selecione um dos emuladores bancários prontos abaixo para testar a captura:
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setStatementFile(new File([], "nubank_julho_2026.pdf"));
+                              triggerPdfSimulation("nubank_julho_2026.pdf");
+                            }}
+                            className="py-1.5 px-2 bg-indigo-950/5 hover:bg-indigo-950/20 border border-purple-500/20 hover:border-purple-500/50 rounded-xl text-left transition text-[10px] truncate block text-purple-300 font-bold"
+                          >
+                            💜 NuBank PDF
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setStatementFile(new File([], "itau_personalite.pdf"));
+                              triggerPdfSimulation("itau_personalite.pdf");
+                            }}
+                            className="py-1.5 px-2 bg-indigo-950/5 hover:bg-indigo-950/20 border border-sky-500/20 hover:border-sky-500/50 rounded-xl text-left transition text-[10px] truncate block text-sky-300 font-bold"
+                          >
+                            🧡 Itaú PDF
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-white">Copie e Cole do App/Site do seu Banco</p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Esta opção é <strong>100% livre de limite de tamanho de arquivos</strong>. Abra seu extrato, selecione todo o texto (Ctrl+A), copie (Ctrl+C) e cole abaixo:
+                        </p>
+                      </div>
+
+                      <textarea
+                        value={pastedText}
+                        onChange={(e) => setPastedText(e.target.value)}
+                        placeholder="Cole aqui o texto copiado do seu extrato bancário (ex: transações, tabelas, pix, faturas)..."
+                        className="w-full h-40 px-3 py-2 bg-[#050505] border border-white/10 rounded-2xl outline-none focus:border-indigo-500 text-xs font-sans text-white transition resize-none placeholder-slate-600 font-mono text-[10px]"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={parsePastedText}
+                        disabled={!pastedText.trim() || importingState === "parsing"}
+                        className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          pastedText.trim() && importingState !== "parsing"
+                            ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10"
+                            : "bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed"
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                        Analisar Texto com IA
                       </button>
                     </div>
-                  </div>
+                  )}
                 </div>
               </motion.div>
             )}
