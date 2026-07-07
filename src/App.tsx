@@ -1167,7 +1167,9 @@ export default function App() {
                 {tab.icon}
                 <span className="flex-1 text-left">{tab.label}</span>
                 {tab.id === "fluxo" && hasNearCardDueDate() && (
-                  <AlertCircle className="w-4 h-4 text-amber-500 animate-pulse shrink-0" title="Vencimento de fatura de cartão nos próximos 3 dias!" />
+                  <span className="px-2 py-0.5 text-[9px] font-extrabold bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md uppercase tracking-wider shrink-0 animate-pulse">
+                    Fatura
+                  </span>
                 )}
               </button>
             ))}

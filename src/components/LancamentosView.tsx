@@ -529,6 +529,163 @@ export default function LancamentosView({
     setImportingState("parsing");
     setImportSuccessCount(null);
 
+    const lines = pastedText.split("\n");
+    const matchedRows: Array<{
+      id: string;
+      date: string;
+      description: string;
+      amount: number;
+      type: "income" | "expense";
+      category: string;
+      selected: boolean;
+    }> = [];
+
+    // Loop through the lines and attempt high-reliability client-side regex parsing
+    for (let i = 0; i < lines.length; i++) {
+      let lineClean = lines[i].trim();
+      if (!lineClean) continue;
+
+      // Strip parentheses if the user copied the format literally with outer parentheses
+      if (lineClean.startsWith("(")) {
+        lineClean = lineClean.substring(1).trim();
+      }
+      if (lineClean.endsWith(")")) {
+        lineClean = lineClean.substring(0, lineClean.length - 1).trim();
+      }
+
+      // Format regex matching: DD/MM/YYYY [Description] [-]R$ [Value]
+      // Supporting day, month, optional 2-to-4 digit year, description, optional leading minus, R$, optional inner minus, and formatted value.
+      const lineRegex = /^\s*(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\s+(.*?)\s*([-+])?\s*R\$\s*([-+])?\s*([\d\.,\s]+)\s*$/i;
+      const match = lineClean.match(lineRegex);
+
+      if (match) {
+        const day = match[1];
+        const month = match[2];
+        let year = match[3] || new Date().getFullYear().toString();
+        if (year.length === 2) {
+          year = "20" + year;
+        }
+        const description = match[4].trim();
+        const isNegative = match[5] === "-" || match[6] === "-";
+        const amountStr = match[7].trim();
+
+        // Convert Brazilian-formatted number string (e.g. 3.459,60) to a valid float
+        const cleanAmountStr = amountStr.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+        const amountNum = Math.abs(parseFloat(cleanAmountStr));
+
+        if (!isNaN(amountNum)) {
+          // Detect type
+          const type = isNegative ? "expense" : "income";
+          
+          // Keyword-based classification for the parsed statement
+          const descLower = description.toLowerCase();
+          let category = "Outros";
+
+          if (type === "income") {
+            if (
+              descLower.includes("salario") || descLower.includes("salário") || 
+              descLower.includes("clt") || descLower.includes("liquido") || 
+              descLower.includes("vencimento") || descLower.includes("remuneracao") ||
+              descLower.includes("remuneração")
+            ) {
+              category = "Salário";
+            } else if (
+              descLower.includes("invest") || descLower.includes("divid") || 
+              descLower.includes("rend") || descLower.includes("tesouro") || 
+              descLower.includes("fundo") || descLower.includes("aplicacao") ||
+              descLower.includes("aplicação")
+            ) {
+              category = "Investimentos";
+            } else if (
+              descLower.includes("freela") || descLower.includes("extra") || 
+              descLower.includes("bico") || descLower.includes("venda")
+            ) {
+              category = "Freelance";
+            }
+          } else {
+            if (
+              descLower.includes("almoço") || descLower.includes("almoco") || descLower.includes("jantar") || 
+              descLower.includes("pizza") || descLower.includes("burger") || descLower.includes("lanchonete") || 
+              descLower.includes("restaurante") || descLower.includes("padaria") || descLower.includes("mercado") || 
+              descLower.includes("supermercado") || descLower.includes("comida") || descLower.includes("ifood") || 
+              descLower.includes("carrefour") || descLower.includes("pão") || descLower.includes("pao") ||
+              descLower.includes("feira") || descLower.includes("açougue") || descLower.includes("acougue")
+            ) {
+              category = "Alimentação";
+            } else if (
+              descLower.includes("aluguel") || descLower.includes("condominio") || descLower.includes("condomínio") || 
+              descLower.includes("luz") || descLower.includes("agua") || descLower.includes("água") || 
+              descLower.includes("energia") || descLower.includes("sabesp") || 
+              descLower.includes("enel") || descLower.includes("gás") || descLower.includes("gas") ||
+              descLower.includes("iptu") || descLower.includes("reforma")
+            ) {
+              category = "Moradia";
+            } else if (
+              descLower.includes("uber") || descLower.includes("combustivel") || descLower.includes("combustível") || 
+              descLower.includes("gasolina") || descLower.includes("etanol") || descLower.includes("posto") || 
+              descLower.includes("pedagio") || descLower.includes("pedágio") || descLower.includes("taxi") || 
+              descLower.includes("táxi") || descLower.includes("metrô") || descLower.includes("metro") || 
+              descLower.includes("ônibus") || descLower.includes("onibus") || descLower.includes("ipva") ||
+              descLower.includes("mecanico") || descLower.includes("oficina")
+            ) {
+              category = "Transporte";
+            } else if (
+              descLower.includes("net") || descLower.includes("vivo") || descLower.includes("claro") || 
+              descLower.includes("tim") || descLower.includes("telefone") || descLower.includes("internet") || 
+              descLower.includes("tarifa") || descLower.includes("mensalidade") || descLower.includes("banco") || 
+              descLower.includes("imposto") || descLower.includes("taxa") || descLower.includes("boleto") ||
+              descLower.includes("seguro") || descLower.includes("hospedagem") || descLower.includes("tributo") ||
+              descLower.includes("iof") || descLower.includes("juros") || descLower.includes("débito em conta") ||
+              descLower.includes("debito em conta") || descLower.includes("pagamento de boleto")
+            ) {
+              category = "Serviços";
+            } else if (
+              descLower.includes("netflix") || descLower.includes("spotify") || descLower.includes("cinema") || 
+              descLower.includes("show") || descLower.includes("bar") || descLower.includes("cerveja") || 
+              descLower.includes("viagem") || descLower.includes("hotel") || descLower.includes("festa") || 
+              descLower.includes("ingresso") || descLower.includes("lazer") || descLower.includes("jogos") ||
+              descLower.includes("steam") || descLower.includes("shopee") || descLower.includes("amazon") ||
+              descLower.includes("aliexpress") || descLower.includes("presente") || descLower.includes("compra") ||
+              descLower.includes("deb") || descLower.includes("débito")
+            ) {
+              category = "Lazer";
+            } else if (
+              descLower.includes("curso") || descLower.includes("faculdade") || descLower.includes("escola") || 
+              descLower.includes("livro") || descLower.includes("udemy") || descLower.includes("mensalidade escolar") ||
+              descLower.includes("estudo") || descLower.includes("ingles") || descLower.includes("inglês")
+            ) {
+              category = "Educação";
+            } else if (
+              descLower.includes("farmacia") || descLower.includes("drogaria") || descLower.includes("remedio") || 
+              descLower.includes("remédio") || descLower.includes("consulta") || descLower.includes("medico") || 
+              descLower.includes("médico") || descLower.includes("dentista") || descLower.includes("hospital") || 
+              descLower.includes("exame") || descLower.includes("saude") || descLower.includes("saúde")
+            ) {
+              category = "Saúde";
+            }
+          }
+
+          matchedRows.push({
+            id: `pasted-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            date: `${year}-${month}-${day}`,
+            description,
+            amount: amountNum,
+            type,
+            category,
+            selected: true
+          });
+        }
+      }
+    }
+
+    if (matchedRows.length > 0) {
+      setParsedTransactions(matchedRows);
+      setImportingState("parsed");
+      setPastedText("");
+      return;
+    }
+
+    // fallback to Gemini if format rules are not exactly matched
     try {
       const response = await fetch("/api/ai/parse-statement", {
         method: "POST",
@@ -723,7 +880,7 @@ export default function LancamentosView({
         <div className="space-y-1 text-left">
           <span className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-wider block">Co-piloto Financeiro</span>
           <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">Painel de Lançamentos</h2>
-          <p className="text-xs text-slate-400">Insira suas transações manualmente, edite o histórico ou automatize tudo via importador óptico de PDFs.</p>
+          <p className="text-xs text-slate-400">Insira suas transações manualmente, edite o histórico ou automatize tudo copiando e colando seu extrato em massa.</p>
         </div>
 
         {/* Action switch button */}
@@ -739,8 +896,8 @@ export default function LancamentosView({
             onClick={() => { setShowImportModal(true); setImportSuccessCount(null); }}
             className="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-emerald-600/10 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/10"
           >
-            <FileText className="w-3.5 h-3.5 text-emerald-400" />
-            Importar Extrato PDF 📁
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            Importar em Massa ⚡
           </button>
         </div>
       </div>
@@ -820,11 +977,11 @@ export default function LancamentosView({
                 className="w-full p-4 bg-gradient-to-br from-emerald-950/30 to-slate-900 border border-emerald-500/10 hover:border-emerald-500/30 rounded-2xl text-left transition duration-300 hover:shadow-lg hover:shadow-emerald-500/5 group flex items-start gap-3.5 cursor-pointer"
               >
                 <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition duration-300 shrink-0">
-                  <FileText className="w-5 h-5" />
+                  <Sparkles className="w-5 h-5 animate-pulse" />
                 </div>
                 <div className="space-y-0.5 min-w-0">
-                  <h4 className="text-xs font-bold text-white group-hover:text-emerald-300 transition font-sans">📁 Importar Extrato (IA)</h4>
-                  <p className="text-[10px] text-slate-400 leading-relaxed font-sans">Suba o PDF do extrato bancário ou cole dados para leitura inteligente da IA.</p>
+                  <h4 className="text-xs font-bold text-white group-hover:text-emerald-300 transition font-sans">⚡ Importar em Massa</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed font-sans">Cole a lista de transações do seu extrato para importar dezenas de linhas instantaneamente.</p>
                 </div>
               </button>
             </div>
@@ -1422,8 +1579,8 @@ export default function LancamentosView({
 
               <div className="flex items-center justify-between shrink-0">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block">📁 Importador de Extratos com Inteligência Artificial</span>
-                  <h3 className="text-lg font-bold text-white tracking-tight">Importar Extrato</h3>
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block">⚡ IMPORTAÇÃO RÁPIDA E AUTOMÁTICA EM MASSA</span>
+                  <h3 className="text-lg font-bold text-white tracking-tight">Importar Lançamentos</h3>
                 </div>
                 <button
                   type="button"
@@ -1441,100 +1598,39 @@ export default function LancamentosView({
 
               {importingState === "idle" && (
                 <div className="space-y-4 flex-1 overflow-y-auto pr-1">
-                  {/* Mode Tabs */}
-                  <div className="flex bg-[#050505] p-1 border border-white/5 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => setPdfSubMode("upload")}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        pdfSubMode === "upload"
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      <FileText className="w-4 h-4" /> Enviar PDF do Extrato
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPdfSubMode("paste")}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        pdfSubMode === "paste"
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      <Pencil className="w-4 h-4" /> Copiar e Colar Texto
-                    </button>
+                  {/* Explanatory Rule Box */}
+                  <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl space-y-2 text-xs text-slate-300">
+                    <span className="font-bold text-indigo-400 block font-mono text-[9px] uppercase tracking-wider">📋 REGRA PARA IMPORTAÇÃO EM MASSA (100% GARANTIDO)</span>
+                    <p className="font-sans leading-relaxed text-[11px]">
+                      Para cadastrar dezenas ou centenas de linhas de uma vez instantaneamente e sem erros, cole o seu extrato seguindo o padrão abaixo (uma transação por linha):
+                    </p>
+                    <div className="bg-[#050505] p-3 rounded-xl font-mono text-[10px] text-emerald-400 border border-white/5 space-y-1 leading-normal select-all">
+                      <div>DD/MM/AAAA Descrição da Transação R$ Valor_Positivo (Ganhos)</div>
+                      <div>DD/MM/AAAA Descrição da Transação -R$ Valor_Negativo (Gastos)</div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic">
+                      Exemplo: <code className="text-white font-mono font-semibold">05/07/2026 Pix enviado -R$ 2.000,00</code> ou <code className="text-white font-mono font-semibold">06/07/2026 Liquido de vencimento R$ 2.272,16</code>
+                    </p>
                   </div>
 
-                  {pdfSubMode === "upload" ? (
-                    <div className="space-y-4">
-                      {/* Drag & Drop zone */}
-                      <div
-                        className="border-2 border-dashed border-white/10 hover:border-emerald-500/30 rounded-2xl p-8 text-center space-y-4 bg-[#050505] transition-colors relative cursor-pointer group"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const file = e.dataTransfer.files?.[0];
-                          if (file && file.type === "application/pdf") {
-                            setStatementFile(file);
-                            parseRealPdf(file);
-                          } else {
-                            alert("Por favor, selecione ou solte um arquivo PDF.");
-                          }
-                        }}
-                      >
-                        <input
-                          type="file"
-                          accept=".pdf"
-                          id="file-upload-input"
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setStatementFile(file);
-                              parseRealPdf(file);
-                            }
-                          }}
-                        />
-                        <div className="mx-auto w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <FileText className="w-6 h-6" />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-white">Arraste seu arquivo PDF aqui ou clique para buscar</p>
-                          <p className="text-[10px] text-slate-500 font-mono">Suporta qualquer formato de banco (Nubank, Itaú, Bradesco, Inter, Santander)</p>
-                        </div>
-                      </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Cole aqui o texto do extrato</label>
+                    <textarea
+                      placeholder="Cole aqui seu extrato completo..."
+                      rows={8}
+                      className="w-full p-4 bg-[#050505] border border-white/10 rounded-2xl outline-none focus:border-emerald-500 text-xs text-white font-mono leading-relaxed"
+                      value={pastedText}
+                      onChange={(e) => setPastedText(e.target.value)}
+                    />
+                  </div>
 
-                      <div className="p-4 bg-slate-950 border border-white/5 rounded-2xl text-left space-y-2">
-                        <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider font-bold block">💡 Dica da Inteligência Artificial</span>
-                        <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
-                          Nosso cérebro Gemini de IA lê o PDF nativo, decodifica datas, valores e categorias de forma inteligente, dispensando digitação manual!
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Cole aqui o texto do extrato</label>
-                        <textarea
-                          placeholder="Cole a lista de transações copiada do app do seu banco ou internet banking (ex: '02/07 Uber R$18,90 ...')"
-                          rows={8}
-                          className="w-full p-4 bg-[#050505] border border-white/10 rounded-2xl outline-none focus:border-emerald-500 text-xs text-white font-mono leading-relaxed"
-                          value={pastedText}
-                          onChange={(e) => setPastedText(e.target.value)}
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={parsePastedText}
-                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 text-center"
-                      >
-                        <Sparkles className="w-4 h-4 animate-pulse" /> Extrair Lançamentos com IA ⚡
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={parsePastedText}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 text-center"
+                  >
+                    <Sparkles className="w-4 h-4 animate-pulse" /> Extrair Lançamentos Automático ⚡
+                  </button>
                 </div>
               )}
 
