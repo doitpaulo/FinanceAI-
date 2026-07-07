@@ -841,17 +841,19 @@ Retorne uma lista estruturada como um array JSON de objetos contendo exatamente 
 
     const response = await aiClient.models.generateContent({
       model: "gemini-3.5-flash",
-      contents: [
-        {
-          inlineData: {
-            mimeType: "application/pdf",
-            data: fileBase64
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType: "application/pdf",
+              data: fileBase64
+            }
+          },
+          {
+            text: prompt
           }
-        },
-        {
-          text: prompt
-        }
-      ],
+        ]
+      },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
