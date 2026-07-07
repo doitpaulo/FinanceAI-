@@ -371,8 +371,18 @@ export default function App() {
           .filter(t => t.type === "expense" && t.date === todayStr)
           .reduce((sum, t) => sum + t.amount, 0);
         const valWithNew = todayExpenses + txData.amount;
+        const threshold = db.profile.alertThreshold || 'moderate';
         const exceeded = valWithNew > dailySpendingLimit;
-        const close = valWithNew >= dailySpendingLimit * 0.8; // 80% or more
+        
+        let close = false;
+        if (threshold === 'strict') {
+          close = valWithNew >= dailySpendingLimit * 0.5; // strict: alert starting at 50%
+        } else if (threshold === 'moderate') {
+          close = valWithNew >= dailySpendingLimit * 0.8; // moderate: alert starting at 80%
+        } else {
+          close = false; // silent: only alert when exceeded (>100%)
+        }
+
         if (close || exceeded) {
           dailyLimitWarning = {
             limit: dailySpendingLimit,
@@ -1171,10 +1181,29 @@ export default function App() {
             <div className="md:hidden shrink-0">
               <FinanceAILogo size="sm" iconOnly />
             </div>
-            <span className="text-xs font-mono text-slate-500 hidden sm:inline">Usuário:</span>
-            <span className="text-xs md:text-sm font-semibold text-white bg-[#050505] px-2.5 py-1 rounded-full border border-white/10 truncate max-w-[150px] sm:max-w-none">
-              {db.profile.name} <span className="hidden md:inline">({db.profile.email})</span>
-            </span>
+            <div className="flex items-center gap-2">
+              {db.profile.avatarUrl ? (
+                db.profile.avatarUrl.length > 2 ? (
+                  <img 
+                    src={db.profile.avatarUrl} 
+                    alt="Avatar" 
+                    className="w-7 h-7 rounded-full border border-white/20 object-cover shrink-0" 
+                    referrerPolicy="no-referrer" 
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-indigo-950 border border-indigo-500/30 flex items-center justify-center text-sm shrink-0">
+                    {db.profile.avatarUrl}
+                  </div>
+                )
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0 border border-white/20">
+                  {db.profile.name.substring(0, 2).toUpperCase()}
+                </div>
+              )}
+              <span className="text-xs md:text-sm font-semibold text-white bg-[#050505] px-2.5 py-1 rounded-full border border-white/10 truncate max-w-[150px] sm:max-w-none">
+                {db.profile.name} <span className="hidden md:inline">({db.profile.email})</span>
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
@@ -1404,8 +1433,31 @@ export default function App() {
                 )}
               </div>
 
-              <div className="p-3 bg-[#050505] rounded-xl text-[11px] text-slate-400 leading-relaxed border border-white/5">
-                💡 <strong>Análise do Co-piloto:</strong> Gastar mais do que você ganha ou estourar o limite diário pode forçar você a recorrer ao cartão de crédito e comprometer sua reserva de emergência.
+              <div className="p-4 bg-[#050505] rounded-xl text-[11px] text-slate-300 leading-relaxed border border-white/5 space-y-2">
+                <div className="flex items-center gap-1.5 text-indigo-400 font-bold font-mono text-[10px]">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  CO-PILOTO FINANCEIRO ADAPTATIVO
+                </div>
+                
+                <p className="text-slate-300">
+                  {db.profile.spendingPersona === "gastador" && "⚠️ Perfil GASTADOR ativo: Atenção redobrada! Compras emotivas ou por impulso são os maiores vilões do seu planejamento."}
+                  {db.profile.spendingPersona === "poupador" && "🌱 Perfil POUPADOR ativo: Como você prefere economizar, reflita se esse gasto realmente agrega valor à sua vida."}
+                  {db.profile.spendingPersona === "investidor" && "📈 Perfil INVESTIDOR ativo: Cada real gasto hoje é um real a menos rendendo juros compostos a seu favor no longo prazo!"}
+                  {db.profile.spendingPersona === "planejador" && "📋 Perfil PLANEJADOR ativo: Certifique-se de ajustar seu orçamento mensal para absorver este lançamento extraordinário."}
+                  {(!db.profile.spendingPersona) && "💡 Evite extrapolar limites diários para proteger seu fluxo de caixa e blindar suas caixinhas."}
+                </p>
+
+                {db.profile.mainSavingsFocus && (
+                  <div className="pt-2 border-t border-white/5 flex flex-col gap-0.5 text-[10px] text-slate-500">
+                    <span className="font-bold text-slate-400 uppercase tracking-wider font-mono text-[9px]">Foco de Economia Ativo:</span>
+                    <span>
+                      {db.profile.mainSavingsFocus === "reserve" && "🛡️ Foco em Reserva de Emergência: Sua prioridade absoluta é criar estabilidade contra imprevistos!"}
+                      {db.profile.mainSavingsFocus === "debts" && "💸 Foco em Quitar Dívidas: Evite novas contas para amortizar juros acumulados mais rápido!"}
+                      {db.profile.mainSavingsFocus === "investments" && "🚀 Foco em Investimentos: Priorize acumular ativos para gerar renda passiva futuramente!"}
+                      {db.profile.mainSavingsFocus === "leisure_cut" && "🍿 Foco em Cortar Supérfluos: Este item entra no seu radar de cortes conscientes!"}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 text-xs font-bold pt-2">

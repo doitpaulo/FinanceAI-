@@ -13,6 +13,11 @@ export interface Profile {
   riskProfile: 'conservador' | 'moderado' | 'agressivo';
   onboardingCompleted: boolean;
   dailySpendingLimit?: number;
+  avatarUrl?: string;
+  alertThreshold?: 'silent' | 'moderate' | 'strict';
+  spendingPersona?: 'poupador' | 'gastador' | 'investidor' | 'planejador';
+  mainSavingsFocus?: 'debts' | 'investments' | 'leisure_cut' | 'reserve';
+  showProactiveAIHints?: boolean;
 }
 
 export interface Settings {

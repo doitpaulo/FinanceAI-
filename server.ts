@@ -848,7 +848,9 @@ Retorne uma lista estruturada como um array JSON de objetos contendo exatamente 
             data: fileBase64
           }
         },
-        prompt
+        {
+          text: prompt
+        }
       ],
       config: {
         responseMimeType: "application/json",

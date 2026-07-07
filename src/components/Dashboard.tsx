@@ -530,6 +530,81 @@ export default function Dashboard({
         </div>
       )}
 
+      {/* PROACTIVE AI COPILOT ADVICE CARD */}
+      {data.profile.showProactiveAIHints !== false && (
+        <div className="p-5 bg-[#111111] border border-indigo-500/15 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left relative overflow-hidden" id="proactive-copilot-card">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
+          
+          <div className="space-y-1.5 z-10">
+            <span className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-wider block flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" /> 
+              Conselheiro Proativo Co-Piloto AI
+            </span>
+            
+            {!data.profile.spendingPersona ? (
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-white">Seu Co-piloto Adaptativo está pronto!</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Personalize seu perfil respondendo às perguntas rápidas na aba <strong>Ajustes &gt; Meu Perfil</strong> para receber conselhos direcionados de corte de despesas, metas de investimento e alertas proativos.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-white">
+                  Conselho para Perfil{" "}
+                  <span className="text-indigo-400 font-extrabold capitalize">
+                    {data.profile.spendingPersona === "gastador" && "Gastador Emocional ⚠️"}
+                    {data.profile.spendingPersona === "poupador" && "Poupador Extremo 🌱"}
+                    {data.profile.spendingPersona === "investidor" && "Investidor de Longo Prazo 📈"}
+                    {data.profile.spendingPersona === "planejador" && "Planejador Consciente 📋"}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {data.profile.spendingPersona === "gastador" && (
+                    <span>
+                      Identificamos que compras por impulso são seu ponto fraco. Para este mês, sugerimos criar uma <strong>regra de 24 horas</strong> antes de qualquer compra supérflua acima de R$ 100. Seu teto de gastos diário é essencial para segurar o ímpeto!
+                    </span>
+                  )}
+                  {data.profile.spendingPersona === "poupador" && (
+                    <span>
+                      Você possui uma excelente disciplina para guardar! Lembre-se apenas de destinar uma pequena parcela para o seu lazer (como delivery ou passeios) para evitar frustrações. Poupar com inteligência é poupar com sustentabilidade.
+                    </span>
+                  )}
+                  {data.profile.spendingPersona === "investidor" && (
+                    <span>
+                      Excelente foco! Como seu objetivo são os aportes, que tal destinar parte do saldo livre de hoje (R$ {Math.floor(netCashBalance * 0.2)}) para a sua caixinha de investimentos? Fazer aportes semanais acelera o efeito dos juros compostos.
+                    </span>
+                  )}
+                  {data.profile.spendingPersona === "planejador" && (
+                    <span>
+                      Seu controle metódico é seu maior superpoder! Para otimizar suas finanças, tente prever os vencimentos futuros com antecedência e use o simulador de decisões para verificar o impacto de compras parceladas nas suas metas.
+                    </span>
+                  )}
+                </p>
+                
+                {data.profile.mainSavingsFocus && (
+                  <p className="text-[10px] text-slate-500 pt-1 border-t border-white/5 mt-2">
+                    🎯 <strong>Recomendação de Foco:</strong>{" "}
+                    {data.profile.mainSavingsFocus === "reserve" && "Com o foco em Reserva de Emergência, certifique-se de preencher a caixinha até cobrir 6 meses de gastos fixos. Evite investimentos de risco até lá."}
+                    {data.profile.mainSavingsFocus === "debts" && "Com o foco em Quitar Dívidas, evite parcelamentos novos no cartão! Amortize as parcelas restantes do seu financiamento para reduzir os juros."}
+                    {data.profile.mainSavingsFocus === "investments" && "Com o foco em Investimentos, priorize aumentar seu patrimônio no Tesouro IPCA ou outros ativos seguros antes de gastar qualquer sobra de caixa."}
+                    {data.profile.mainSavingsFocus === "leisure_cut" && "Com o foco em Cortar Supérfluos, fique atento aos gastos invisíveis (assinaturas não utilizadas, delivery recorrente). Crie limites rígidos de lazer!"}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {!data.profile.spendingPersona && (
+            <div className="shrink-0 pt-2 md:pt-0">
+              <span className="text-[10px] text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-full font-bold">
+                Ajustes &gt; Meu Perfil
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* COUNTERS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 text-left relative overflow-hidden" id="net-worth-card">
