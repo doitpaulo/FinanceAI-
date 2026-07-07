@@ -15,6 +15,150 @@ interface LancamentosProps {
   onEditTransaction: (id: string, tx: Partial<Transaction>) => void;
 }
 
+export interface ParsedQuickTransaction {
+  amount: string;
+  description: string;
+  type: "income" | "expense";
+  category: string;
+}
+
+export function parseQuickInput(text: string): ParsedQuickTransaction | null {
+  if (!text || !text.trim()) return null;
+
+  const trimmed = text.trim();
+  
+  // Find all numbers (including decimals with dot or comma)
+  // Matching patterns like: 45 | 45.90 | 45,90 | 1200 | 1.200,00 | R$ 45
+  const numberRegex = /(?:R\$\s*)?(\d+(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{3})*(?:\.\d{2})?)/gi;
+  const matches = trimmed.match(numberRegex);
+  
+  if (!matches || matches.length === 0) return null;
+  
+  // Use the first match
+  const rawNum = matches[0].replace(/R\$/i, "").trim();
+  
+  // Convert standard Brazilian decimal format to US decimal format for input fields
+  let parsedAmount = "";
+  if (rawNum.includes(",") && rawNum.includes(".")) {
+    // e.g. 1.200,50 -> 1200.50
+    parsedAmount = rawNum.replace(/\./g, "").replace(",", ".");
+  } else if (rawNum.includes(",")) {
+    // e.g. 45,90 -> 45.90
+    const parts = rawNum.split(",");
+    if (parts[1] && parts[1].length === 2) {
+      parsedAmount = rawNum.replace(",", ".");
+    } else {
+      parsedAmount = rawNum.replace(",", ".");
+    }
+  } else {
+    parsedAmount = rawNum;
+  }
+  
+  // Ensure we can convert it to a valid float
+  const numericVal = parseFloat(parsedAmount);
+  if (isNaN(numericVal)) return null;
+  
+  // Extract description: everything except the number match and symbols like R$
+  let description = trimmed.replace(matches[0], "").replace(/R\$/gi, "").replace(/[\s\-\:\#]+/g, " ").trim();
+  
+  if (description) {
+    description = description.charAt(0).toUpperCase() + description.slice(1);
+  } else {
+    description = "Transação Expresso";
+  }
+  
+  const descLower = description.toLowerCase();
+  
+  // Detect Type
+  let type: "income" | "expense" = "expense";
+  const incomeKeywords = [
+    "salario", "salário", "clt", "provento", "freela", "freelance", "pix de", "recebimento", 
+    "recebi", "ganho", "rendimento", "dividendo", "venda", "reembolso", "bônus", "bonus", "faturamento"
+  ];
+  if (incomeKeywords.some(keyword => descLower.includes(keyword))) {
+    type = "income";
+  }
+  
+  // Detect Category
+  let category = "Outros";
+  if (type === "income") {
+    if (descLower.includes("salario") || descLower.includes("salário") || descLower.includes("clt") || descLower.includes("mensal")) {
+      category = "Salário";
+    } else if (descLower.includes("invest") || descLower.includes("divid") || descLower.includes("rend") || descLower.includes("tesouro") || descLower.includes("fundo")) {
+      category = "Investimentos";
+    } else if (descLower.includes("freela") || descLower.includes("extra") || descLower.includes("bico") || descLower.includes("venda")) {
+      category = "Freelance";
+    } else {
+      category = "Outros";
+    }
+  } else {
+    if (
+      descLower.includes("almoço") || descLower.includes("almoco") || descLower.includes("jantar") || 
+      descLower.includes("pizza") || descLower.includes("burger") || descLower.includes("lanchonete") || 
+      descLower.includes("restaurante") || descLower.includes("padaria") || descLower.includes("mercado") || 
+      descLower.includes("supermercado") || descLower.includes("comida") || descLower.includes("ifood") || 
+      descLower.includes("carrefour") || descLower.includes("pão") || descLower.includes("pao") ||
+      descLower.includes("feira") || descLower.includes("açougue") || descLower.includes("acougue")
+    ) {
+      category = "Alimentação";
+    } else if (
+      descLower.includes("aluguel") || descLower.includes("condominio") || descLower.includes("condomínio") || 
+      descLower.includes("luz") || descLower.includes("agua") || descLower.includes("água") || 
+      descLower.includes("energia") || descLower.includes("coelba") || descLower.includes("sabesp") || 
+      descLower.includes("enel") || descLower.includes("gás") || descLower.includes("gas") ||
+      descLower.includes("iptu") || descLower.includes("reforma")
+    ) {
+      category = "Moradia";
+    } else if (
+      descLower.includes("uber") || descLower.includes("combustivel") || descLower.includes("combustível") || 
+      descLower.includes("gasolina") || descLower.includes("etanol") || descLower.includes("posto") || 
+      descLower.includes("pedagio") || descLower.includes("pedágio") || descLower.includes("taxi") || 
+      descLower.includes("táxi") || descLower.includes("metrô") || descLower.includes("metro") || 
+      descLower.includes("ônibus") || descLower.includes("onibus") || descLower.includes("ipva") ||
+      descLower.includes("mecanico") || descLower.includes("oficina")
+    ) {
+      category = "Transporte";
+    } else if (
+      descLower.includes("net") || descLower.includes("vivo") || descLower.includes("claro") || 
+      descLower.includes("tim") || descLower.includes("telefone") || descLower.includes("internet") || 
+      descLower.includes("tarifa") || descLower.includes("mensalidade") || descLower.includes("banco") || 
+      descLower.includes("imposto") || descLower.includes("taxa") || descLower.includes("boleto") ||
+      descLower.includes("seguro") || descLower.includes("hospedagem")
+    ) {
+      category = "Serviços";
+    } else if (
+      descLower.includes("netflix") || descLower.includes("spotify") || descLower.includes("cinema") || 
+      descLower.includes("show") || descLower.includes("bar") || descLower.includes("cerveja") || 
+      descLower.includes("viagem") || descLower.includes("hotel") || descLower.includes("festa") || 
+      descLower.includes("ingresso") || descLower.includes("lazer") || descLower.includes("jogos") ||
+      descLower.includes("steam") || descLower.includes("shopee") || descLower.includes("amazon") ||
+      descLower.includes("aliexpress") || descLower.includes("presente")
+    ) {
+      category = "Lazer";
+    } else if (
+      descLower.includes("curso") || descLower.includes("faculdade") || descLower.includes("escola") || 
+      descLower.includes("livro") || descLower.includes("udemy") || descLower.includes("mensalidade escolar") ||
+      descLower.includes("estudo") || descLower.includes("ingles") || descLower.includes("inglês")
+    ) {
+      category = "Educação";
+    } else if (
+      descLower.includes("farmacia") || descLower.includes("drogaria") || descLower.includes("remedio") || 
+      descLower.includes("remédio") || descLower.includes("consulta") || descLower.includes("medico") || 
+      descLower.includes("médico") || descLower.includes("dentista") || descLower.includes("hospital") || 
+      descLower.includes("exame") || descLower.includes("saude") || descLower.includes("saúde")
+    ) {
+      category = "Saúde";
+    }
+  }
+
+  return {
+    amount: parsedAmount,
+    description,
+    type,
+    category
+  };
+}
+
 export default function LancamentosView({
   data,
   onAddTransaction,
@@ -24,6 +168,8 @@ export default function LancamentosView({
 }: LancamentosProps) {
   // Main sub-view switcher: Manual form vs. PDF Import
   const [entryMode, setEntryMode] = useState<"manual" | "pdf">("manual");
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Filter & Search states for the history table
   const [searchQuery, setSearchQuery] = useState("");
@@ -59,6 +205,20 @@ export default function LancamentosView({
   const [accountId, setAccountId] = useState("acc-1");
   const [txDate, setTxDate] = useState(new Date().toISOString().split("T")[0]);
   const [isRecurring, setIsRecurring] = useState(false);
+  const [quickInputText, setQuickInputText] = useState("");
+
+  const handleQuickInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuickInputText(val);
+
+    const parsed = parseQuickInput(val);
+    if (parsed) {
+      setDesc(parsed.description);
+      setAmount(parsed.amount);
+      setType(parsed.type);
+      setCategory(parsed.category);
+    }
+  };
 
   // Editing States for Existing Transactions
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
@@ -227,10 +387,12 @@ export default function LancamentosView({
       // Reset Form
       setDesc("");
       setAmount("");
+      setQuickInputText("");
       setIsRecurring(false);
       setTxDate(new Date().toISOString().split("T")[0]);
       setShowWarningModal(false);
       setWarningDetails(null);
+      setShowManualModal(false);
     };
 
     if (type === "expense") {
@@ -442,6 +604,7 @@ export default function LancamentosView({
       setParsedTransactions([]);
       setShowWarningModal(false);
       setWarningDetails(null);
+      setShowImportModal(false);
     };
 
     // Check if any of the imported expenses trigger a warning
@@ -564,24 +727,20 @@ export default function LancamentosView({
         </div>
 
         {/* Action switch button */}
-        <div className="flex bg-[#111111] p-1 border border-white/5 rounded-2xl shrink-0 self-start md:self-auto">
+        <div className="flex bg-[#111111] p-1 border border-white/5 rounded-2xl shrink-0 self-start md:self-auto gap-1">
           <button
-            onClick={() => { setEntryMode("manual"); setImportSuccessCount(null); }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              entryMode === "manual" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-            }`}
+            onClick={() => { setShowManualModal(true); setImportSuccessCount(null); }}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-indigo-600/10 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/10"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Lançamento Manual
+            <Plus className="w-3.5 h-3.5 text-indigo-400" />
+            Lançamento Manual ⚡
           </button>
           <button
-            onClick={() => { setEntryMode("pdf"); setImportSuccessCount(null); }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              entryMode === "pdf" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-            }`}
+            onClick={() => { setShowImportModal(true); setImportSuccessCount(null); }}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-emerald-600/10 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/10"
           >
-            <FileText className="w-3.5 h-3.5" />
-            Importar Extrato PDF
+            <FileText className="w-3.5 h-3.5 text-emerald-400" />
+            Importar Extrato PDF 📁
           </button>
         </div>
       </div>
@@ -631,448 +790,60 @@ export default function LancamentosView({
       {/* Main Workspace split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* LEFT COLUMN: Input Tool (Form or PDF Import) */}
+        {/* LEFT COLUMN: Launcher Cards */}
         <div className="lg:col-span-4 space-y-4">
-          <AnimatePresence mode="wait">
-            {entryMode === "manual" ? (
-              <motion.div
-                key="manual-entry-pane"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.15 }}
-                className="space-y-3"
+          <div className="bg-[#111111] border border-white/10 rounded-3xl p-6 text-left shadow-lg space-y-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-wider block">Registrar Movimento</span>
+              <h3 className="text-base font-bold text-white tracking-tight font-sans">Nova Transação</h3>
+              <p className="text-xs text-slate-400 font-sans">Escolha o método ideal para registrar seus fluxos.</p>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowManualModal(true)}
+                className="w-full p-4 bg-gradient-to-br from-indigo-950/40 to-slate-900 border border-indigo-500/10 hover:border-indigo-500/30 rounded-2xl text-left transition duration-300 hover:shadow-lg hover:shadow-indigo-500/5 group flex items-start gap-3.5 cursor-pointer"
               >
-                <h3 className="text-xs font-mono text-slate-500 uppercase tracking-widest font-bold text-left pl-1">Registrar Novo Ganho/Gasto</h3>
-                
-                <form onSubmit={handleManualSubmit} className="bg-[#111111] border border-white/10 rounded-3xl p-5 space-y-4 text-left shadow-lg">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Tipo de Transação</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setType("income")}
-                        className={`py-2 px-3 text-xs font-bold rounded-xl border transition cursor-pointer flex items-center justify-center gap-1 ${
-                          type === "income"
-                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-bold"
-                            : "border-white/10 bg-white/5 text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                        Ganho (Entrada)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setType("expense")}
-                        className={`py-2 px-3 text-xs font-bold rounded-xl border transition cursor-pointer flex items-center justify-center gap-1 ${
-                          type === "expense"
-                            ? "border-rose-500/40 bg-rose-500/10 text-rose-400 font-bold"
-                            : "border-white/10 bg-white/5 text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        <ArrowDownRight className="w-3.5 h-3.5" />
-                        Gasto (Saída)
-                      </button>
-                    </div>
-                  </div>
+                <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition duration-300 shrink-0">
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                </div>
+                <div className="space-y-0.5 min-w-0">
+                  <h4 className="text-xs font-bold text-white group-hover:text-indigo-300 transition font-sans">⚡ Lançamento Manual</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed font-sans">Formulário clássico com o inovador <strong>Lançamento Expresso por Texto</strong>.</p>
+                </div>
+              </button>
 
-                  <div className="space-y-1">
-                    <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Descrição</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Almoço restaurante, Pix freela, etc."
-                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs font-sans text-white transition"
-                      value={desc}
-                      onChange={(e) => setDesc(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Valor (R$)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs font-mono text-white transition"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Data</label>
-                      <input
-                        type="date"
-                        className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs font-mono text-white transition"
-                        value={txDate}
-                        onChange={(e) => setTxDate(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Categoria</label>
-                    <select
-                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white transition"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                    >
-                      {type === "income" ? (
-                        <>
-                          <option value="Salário">Salário / CLT</option>
-                          <option value="Investimentos">Rendimentos / Investimentos</option>
-                          <option value="Freelance">Trabalho Extra / Freelance</option>
-                          <option value="Outros">Outros Recebimentos</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="Alimentação">Alimentação / Mercado</option>
-                          <option value="Moradia">Moradia / Aluguel</option>
-                          <option value="Transporte">Transporte / Uber / Combustível</option>
-                          <option value="Serviços">Serviços / Contas / Boletos</option>
-                          <option value="Lazer">Lazer / Restaurantes / Viagens</option>
-                          <option value="Educação">Educação / Cursos</option>
-                          <option value="Saúde">Saúde / Medicamentos</option>
-                          <option value="Outros">Outros Gastos</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Conta Destino/Origem</label>
-                    <select
-                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white transition"
-                      value={accountId}
-                      onChange={(e) => setAccountId(e.target.value)}
-                    >
-                      {data.accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} (Saldo: R$ {acc.balance.toLocaleString("pt-BR")})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      id="lanc-recurring-check"
-                      type="checkbox"
-                      className="w-4 h-4 rounded border-white/10 text-indigo-500 focus:ring-indigo-500 bg-[#050505]"
-                      checked={isRecurring}
-                      onChange={(e) => setIsRecurring(e.target.checked)}
-                    />
-                    <label htmlFor="lanc-recurring-check" className="text-xs text-slate-400 cursor-pointer select-none">
-                      Repetir mensalmente de forma fixa
-                    </label>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-md shadow-indigo-600/10"
-                  >
-                    Salvar Lançamento
-                  </button>
-                </form>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="pdf-entry-pane"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.15 }}
-                className="space-y-3"
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="w-full p-4 bg-gradient-to-br from-emerald-950/30 to-slate-900 border border-emerald-500/10 hover:border-emerald-500/30 rounded-2xl text-left transition duration-300 hover:shadow-lg hover:shadow-emerald-500/5 group flex items-start gap-3.5 cursor-pointer"
               >
-                <div className="flex items-center justify-between pl-1">
-                  <h3 className="text-xs font-mono text-slate-500 uppercase tracking-widest font-bold">Leitor de Extrato Inteligente</h3>
-                  <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-mono rounded-full font-bold uppercase tracking-wider">Com IA</span>
+                <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition duration-300 shrink-0">
+                  <FileText className="w-5 h-5" />
                 </div>
-                
-                <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 space-y-4 text-left shadow-lg">
-                  {/* Sub-tabs for PDF Upload vs. Paste Text */}
-                  <div className="flex bg-[#050505] p-1 border border-white/5 rounded-2xl">
-                    <button
-                      type="button"
-                      onClick={() => setPdfSubMode("upload")}
-                      className={`flex-1 py-1.5 rounded-xl text-[10px] font-bold transition text-center cursor-pointer ${
-                        pdfSubMode === "upload" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      Subir PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPdfSubMode("paste")}
-                      className={`flex-1 py-1.5 rounded-xl text-[10px] font-bold transition text-center cursor-pointer ${
-                        pdfSubMode === "paste" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      Copiar e Colar Texto
-                    </button>
-                  </div>
-
-                  {pdfSubMode === "upload" ? (
-                    <>
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-white">Extraia lançamentos instantaneamente</p>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Envie o arquivo PDF do extrato bancário para que nosso algoritmo identifique valores e preencha automaticamente.
-                        </p>
-                      </div>
-
-                      {/* Drop zone / selector */}
-                      <div 
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const file = e.dataTransfer.files?.[0];
-                          if (file && file.type === "application/pdf") {
-                            setStatementFile(file);
-                            parseRealPdf(file);
-                          } else {
-                            alert("Por favor, envie um arquivo em formato PDF.");
-                          }
-                        }}
-                        className="border border-dashed border-white/10 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-indigo-950/5 transition duration-300 flex flex-col items-center justify-center text-center space-y-3 cursor-pointer"
-                        onClick={() => document.getElementById("main-pdf-upload")?.click()}
-                      >
-                        <div className="p-3 bg-indigo-500/10 rounded-full text-indigo-400">
-                          <FileText className="w-6 h-6" />
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="text-[11px] font-bold text-white">Clique ou arraste o arquivo aqui</p>
-                          <p className="text-[9px] text-slate-500">Formato PDF apenas (.pdf)</p>
-                        </div>
-                        <input 
-                          type="file" 
-                          accept=".pdf" 
-                          id="main-pdf-upload"
-                          className="hidden" 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setStatementFile(file);
-                              if (file.size > 0) {
-                                parseRealPdf(file);
-                              } else {
-                                triggerPdfSimulation(file.name);
-                              }
-                            }
-                          }}
-                        />
-                        <button 
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            document.getElementById("main-pdf-upload")?.click();
-                          }}
-                          className="px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white text-indigo-400 text-[10px] font-bold rounded-lg transition cursor-pointer"
-                        >
-                          Selecionar Arquivo
-                        </button>
-                      </div>
-
-                      {/* Simulation Helpers */}
-                      <div className="p-4 bg-[#050505] border border-white/5 rounded-2xl space-y-3">
-                        <span className="text-[9px] font-mono text-indigo-400 uppercase tracking-wider font-bold block">Experimentar Sem Arquivo (Simular)</span>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">
-                          Selecione um dos emuladores bancários prontos abaixo para testar a captura:
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setStatementFile(new File([], "nubank_julho_2026.pdf"));
-                              triggerPdfSimulation("nubank_julho_2026.pdf");
-                            }}
-                            className="py-1.5 px-2 bg-indigo-950/5 hover:bg-indigo-950/20 border border-purple-500/20 hover:border-purple-500/50 rounded-xl text-left transition text-[10px] truncate block text-purple-300 font-bold"
-                          >
-                            💜 NuBank PDF
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setStatementFile(new File([], "itau_personalite.pdf"));
-                              triggerPdfSimulation("itau_personalite.pdf");
-                            }}
-                            className="py-1.5 px-2 bg-indigo-950/5 hover:bg-indigo-950/20 border border-sky-500/20 hover:border-sky-500/50 rounded-xl text-left transition text-[10px] truncate block text-sky-300 font-bold"
-                          >
-                            🧡 Itaú PDF
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-white">Copie e Cole do App/Site do seu Banco</p>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Esta opção é <strong>100% livre de limite de tamanho de arquivos</strong>. Abra seu extrato, selecione todo o texto (Ctrl+A), copie (Ctrl+C) e cole abaixo:
-                        </p>
-                      </div>
-
-                      <textarea
-                        value={pastedText}
-                        onChange={(e) => setPastedText(e.target.value)}
-                        placeholder="Cole aqui o texto copiado do seu extrato bancário (ex: transações, tabelas, pix, faturas)..."
-                        className="w-full h-40 px-3 py-2 bg-[#050505] border border-white/10 rounded-2xl outline-none focus:border-indigo-500 text-xs font-sans text-white transition resize-none placeholder-slate-600 font-mono text-[10px]"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={parsePastedText}
-                        disabled={!pastedText.trim() || importingState === "parsing"}
-                        className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                          pastedText.trim() && importingState !== "parsing"
-                            ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10"
-                            : "bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed"
-                        }`}
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                        Analisar Texto com IA
-                      </button>
-                    </div>
-                  )}
+                <div className="space-y-0.5 min-w-0">
+                  <h4 className="text-xs font-bold text-white group-hover:text-emerald-300 transition font-sans">📁 Importar Extrato (IA)</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed font-sans">Suba o PDF do extrato bancário ou cole dados para leitura inteligente da IA.</p>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Info widget inside Left column */}
+          <div className="p-5 bg-gradient-to-br from-slate-950 to-slate-900/50 border border-white/5 rounded-3xl text-left space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-indigo-400 font-bold uppercase tracking-wider font-mono">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" /> Dica de Produtividade
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+              O <strong>Lançamento Expresso</strong> decifra frases inteiras. Digite por exemplo <span className="text-white font-mono bg-white/5 px-1 py-0.5 rounded">"42,90 almoço ifood"</span> ou <span className="text-white font-mono bg-white/5 px-1 py-0.5 rounded">"1200 clt salario"</span> e os campos se preenchem sozinhos na hora!
+            </p>
+          </div>
         </div>
 
         {/* RIGHT COLUMN: Ledger / Statement Review */}
         <div className="lg:col-span-8 space-y-4">
           <AnimatePresence mode="wait">
-            {entryMode === "pdf" && importingState !== "idle" ? (
-              // EXTRATO IMPORT PREVIEW VIEW
-              <motion.div
-                key="pdf-extracted-pane"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-3 text-left"
-              >
-                <div className="flex items-center justify-between pl-1">
-                  <h3 className="text-xs font-mono text-slate-500 uppercase tracking-widest font-bold">Extrato PDF Lido por OCR</h3>
-                  <button 
-                    onClick={() => { setImportingState("idle"); setStatementFile(null); }}
-                    className="text-[10px] font-mono text-rose-400 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" /> Cancelar Leitura
-                  </button>
-                </div>
-
-                {importingState === "parsing" ? (
-                  <div className="bg-[#111111] border border-white/10 rounded-3xl p-12 text-center flex flex-col items-center justify-center space-y-4 shadow-lg">
-                    <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-white">Escanando Documento...</p>
-                      <p className="text-[10px] text-slate-500 max-w-sm mx-auto">Analisando metadados fiscais, extraindo tabelas bancárias e categorizando transações com IA.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-[#111111] border border-white/10 rounded-3xl p-5 md:p-6 space-y-5 shadow-lg">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-indigo-950/10 border border-indigo-500/20 rounded-2xl">
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-white">Extrato Processado: <span className="text-indigo-300 font-mono">{statementFile?.name}</span></p>
-                        <p className="text-[10px] text-slate-400">Marque as transações que deseja importar e revise a classificação antes de lançar no seu caixa.</p>
-                      </div>
-                      <div className="flex gap-2 shrink-0 self-start sm:self-auto">
-                        <button 
-                          onClick={handleCommitPdfImport}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-md shadow-indigo-600/15"
-                        >
-                          Importar Selecionados ({parsedTransactions.filter(t => t.selected).length})
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="border border-white/5 rounded-2xl overflow-hidden bg-[#050505]">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/5 text-slate-500 uppercase font-mono text-[9px] tracking-wider font-bold bg-white/[0.02]">
-                              <th className="py-3 px-4 w-12 text-center">Sel.</th>
-                              <th className="py-3 px-4 w-24">Data</th>
-                              <th className="py-3 px-4">Descrição Reconhecida</th>
-                              <th className="py-3 px-4 w-44">Categoria Sugerida</th>
-                              <th className="py-3 px-4 text-right w-28">Valor</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                            {parsedTransactions.map((tx, idx) => (
-                              <tr key={tx.id} className="hover:bg-white/[0.02] transition-colors">
-                                <td className="py-3 px-4 text-center">
-                                  <input 
-                                    type="checkbox"
-                                    className="w-4 h-4 rounded border-white/10 text-indigo-500 focus:ring-indigo-500 bg-[#111111]"
-                                    checked={tx.selected}
-                                    onChange={(e) => {
-                                      const updated = [...parsedTransactions];
-                                      updated[idx].selected = e.target.checked;
-                                      setParsedTransactions(updated);
-                                    }}
-                                  />
-                                </td>
-                                <td className="py-3 px-4 font-mono text-slate-400">
-                                  {tx.date.split("-").reverse().join("/")}
-                                </td>
-                                <td className="py-3 px-4 text-white font-medium flex items-center gap-1.5 truncate max-w-[200px]">
-                                  <span className={tx.type === "income" ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>
-                                    {tx.type === "income" ? "↓" : "↑"}
-                                  </span>
-                                  {tx.description}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <select 
-                                    className="bg-[#111111] border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white outline-none focus:border-indigo-500 w-full font-sans"
-                                    value={tx.category}
-                                    onChange={(e) => {
-                                      const updated = [...parsedTransactions];
-                                      updated[idx].category = e.target.value;
-                                      setParsedTransactions(updated);
-                                    }}
-                                  >
-                                    {tx.type === "income" ? (
-                                      <>
-                                        <option value="Salário">Salário / CLT</option>
-                                        <option value="Investimentos">Rendimentos / Investimentos</option>
-                                        <option value="Freelance">Trabalho Extra / Freelance</option>
-                                        <option value="Outros">Outros Recebimentos</option>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <option value="Alimentação">Alimentação / Mercado</option>
-                                        <option value="Moradia">Moradia / Aluguel</option>
-                                        <option value="Transporte">Transporte / Uber / Combustível</option>
-                                        <option value="Serviços">Serviços / Contas / Boletos</option>
-                                        <option value="Lazer">Lazer / Restaurantes / Viagens</option>
-                                        <option value="Educação">Educação / Cursos</option>
-                                        <option value="Saúde">Saúde / Medicamentos</option>
-                                        <option value="Outros">Outros Gastos</option>
-                                      </>
-                                    )}
-                                  </select>
-                                </td>
-                                <td className={`py-3 px-4 text-right font-mono font-bold ${tx.type === "income" ? "text-emerald-400" : "text-rose-400"}`}>
-                                  {tx.type === "income" ? "+" : "-"} R$ {tx.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            ) : (
               // LEDGER HISTORY TABLE VIEW
               <motion.div
                 key="ledger-history-pane"
@@ -1360,7 +1131,6 @@ export default function LancamentosView({
                   </div>
                 </div>
               </motion.div>
-            )}
           </AnimatePresence>
         </div>
 
@@ -1431,6 +1201,472 @@ export default function LancamentosView({
                   Voltar / Cancelar
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MANUAL ENTRY MODAL */}
+        {showManualModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" id="manual-entry-modal">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#111111] border border-white/10 rounded-3xl p-6 max-w-lg w-full text-left space-y-4 shadow-2xl relative overflow-hidden"
+            >
+              {/* Top accent line */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-wider block">⚡ Lançamento Expresso ou Manual</span>
+                  <h3 className="text-lg font-bold text-white tracking-tight">Novo Lançamento</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Lançamento Expresso Quick Input */}
+              <div className="bg-[#050505] border border-white/5 rounded-2xl p-4 space-y-2">
+                <label className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-widest block">
+                  Lançamento Inteligente Expresso ⚡
+                </label>
+                <div className="relative">
+                  <Sparkles className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400 animate-pulse" />
+                  <input
+                    type="text"
+                    placeholder="Digite ex: '42,90 almoço ifood' ou '1200 clt salario'"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white font-sans"
+                    value={quickInputText}
+                    onChange={handleQuickInputChange}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 font-sans">
+                  Nossa inteligência preenche os campos do formulário automaticamente enquanto você digita!
+                </p>
+              </div>
+
+              {/* Form fields */}
+              <form onSubmit={handleManualSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Tipo */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Tipo</label>
+                    <div className="flex bg-[#050505] p-1 border border-white/10 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setType("expense")}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                          type === "expense"
+                            ? "bg-rose-500/15 text-rose-400 border border-rose-500/20 font-bold"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        <ArrowDownRight className="w-3.5 h-3.5" /> Gasto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setType("income")}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                          type === "income"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        <ArrowUpRight className="w-3.5 h-3.5" /> Ganho
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Valor */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Valor (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white font-bold font-mono"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Descrição */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Descrição</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Supermercado Pão de Açúcar"
+                    className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white font-sans"
+                    value={desc}
+                    onChange={(e) => setDesc(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Categoria */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Categoria</label>
+                    <select
+                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white font-sans cursor-pointer"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      {type === "income" ? (
+                        <>
+                          <option value="Salário">Salário / CLT</option>
+                          <option value="Investimentos">Rendimentos / Juros</option>
+                          <option value="Freelance">Trabalho Extra</option>
+                          <option value="Outros">Outros</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Alimentação">Alimentação</option>
+                          <option value="Moradia">Moradia</option>
+                          <option value="Transporte">Transporte</option>
+                          <option value="Serviços">Serviços</option>
+                          <option value="Lazer">Lazer</option>
+                          <option value="Educação">Educação</option>
+                          <option value="Saúde">Saúde</option>
+                          <option value="Outros">Outros</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Conta Origem/Destino */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Conta Associada</label>
+                    <select
+                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white font-sans cursor-pointer"
+                      value={accountId}
+                      onChange={(e) => setAccountId(e.target.value)}
+                    >
+                      {data.accounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} ({acc.bankName})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Data */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Data do Lançamento</label>
+                    <input
+                      type="date"
+                      required
+                      className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-xs text-white font-mono"
+                      value={txDate}
+                      onChange={(e) => setTxDate(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Recorrente */}
+                  <div className="flex items-center gap-2 pt-6 pl-1">
+                    <input
+                      type="checkbox"
+                      id="is-recurring-checkbox"
+                      className="w-4 h-4 rounded border-white/10 bg-[#050505] text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      checked={isRecurring}
+                      onChange={(e) => setIsRecurring(e.target.checked)}
+                    />
+                    <label htmlFor="is-recurring-checkbox" className="text-xs text-slate-300 font-sans select-none cursor-pointer">
+                      Lançamento Fixo Mensal
+                    </label>
+                  </div>
+                </div>
+
+                {/* Submit / Cancel Actions */}
+                <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer shadow-md shadow-indigo-600/10 text-center"
+                  >
+                    Salvar Lançamento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualModal(false)}
+                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer text-center"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* IMPORT ENTRY MODAL */}
+        {showImportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" id="import-entry-modal">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#111111] border border-white/10 rounded-3xl p-6 max-w-3xl w-full text-left space-y-4 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Top accent line */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent" />
+
+              <div className="flex items-center justify-between shrink-0">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block">📁 Importador de Extratos com Inteligência Artificial</span>
+                  <h3 className="text-lg font-bold text-white tracking-tight">Importar Extrato</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportingState("idle");
+                    setStatementFile(null);
+                    setParsedTransactions([]);
+                  }}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {importingState === "idle" && (
+                <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                  {/* Mode Tabs */}
+                  <div className="flex bg-[#050505] p-1 border border-white/5 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setPdfSubMode("upload")}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        pdfSubMode === "upload"
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      <FileText className="w-4 h-4" /> Enviar PDF do Extrato
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPdfSubMode("paste")}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        pdfSubMode === "paste"
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      <Pencil className="w-4 h-4" /> Copiar e Colar Texto
+                    </button>
+                  </div>
+
+                  {pdfSubMode === "upload" ? (
+                    <div className="space-y-4">
+                      {/* Drag & Drop zone */}
+                      <div
+                        className="border-2 border-dashed border-white/10 hover:border-emerald-500/30 rounded-2xl p-8 text-center space-y-4 bg-[#050505] transition-colors relative cursor-pointer group"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files?.[0];
+                          if (file && file.type === "application/pdf") {
+                            setStatementFile(file);
+                            parseRealPdf(file);
+                          } else {
+                            alert("Por favor, selecione ou solte um arquivo PDF.");
+                          }
+                        }}
+                      >
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          id="file-upload-input"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setStatementFile(file);
+                              parseRealPdf(file);
+                            }
+                          }}
+                        />
+                        <div className="mx-auto w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-white">Arraste seu arquivo PDF aqui ou clique para buscar</p>
+                          <p className="text-[10px] text-slate-500 font-mono">Suporta qualquer formato de banco (Nubank, Itaú, Bradesco, Inter, Santander)</p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-slate-950 border border-white/5 rounded-2xl text-left space-y-2">
+                        <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider font-bold block">💡 Dica da Inteligência Artificial</span>
+                        <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                          Nosso cérebro Gemini de IA lê o PDF nativo, decodifica datas, valores e categorias de forma inteligente, dispensando digitação manual!
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Cole aqui o texto do extrato</label>
+                        <textarea
+                          placeholder="Cole a lista de transações copiada do app do seu banco ou internet banking (ex: '02/07 Uber R$18,90 ...')"
+                          rows={8}
+                          className="w-full p-4 bg-[#050505] border border-white/10 rounded-2xl outline-none focus:border-emerald-500 text-xs text-white font-mono leading-relaxed"
+                          value={pastedText}
+                          onChange={(e) => setPastedText(e.target.value)}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={parsePastedText}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 text-center"
+                      >
+                        <Sparkles className="w-4 h-4 animate-pulse" /> Extrair Lançamentos com IA ⚡
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importingState === "parsing" && (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin" />
+                    <Sparkles className="w-6 h-6 text-emerald-400 absolute inset-0 m-auto animate-pulse" />
+                  </div>
+                  <div className="space-y-1 text-center">
+                    <h4 className="text-sm font-bold text-white font-sans">Extraindo lançamentos com IA...</h4>
+                    <p className="text-[10px] text-slate-500 font-mono">Nosso cérebro Gemini está organizando e categorizando todas as linhas do extrato.</p>
+                  </div>
+                </div>
+              )}
+
+              {importingState === "parsed" && (
+                <div className="flex-1 flex flex-col min-h-0 space-y-4">
+                  <div className="flex items-center justify-between shrink-0">
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold">
+                      Revisão dos Lançamentos Identificados ({parsedTransactions.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allSel = parsedTransactions.every(t => t.selected);
+                        setParsedTransactions(parsedTransactions.map(t => ({ ...t, selected: !allSel })));
+                      }}
+                      className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold font-mono uppercase tracking-wider cursor-pointer"
+                    >
+                      {parsedTransactions.every(t => t.selected) ? "Desmarcar Todos" : "Marcar Todos"}
+                    </button>
+                  </div>
+
+                  {/* Extract ledger list */}
+                  <div className="flex-1 overflow-y-auto bg-[#050505] border border-white/10 rounded-2xl p-1 min-h-[200px]">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-white/5 text-slate-500 text-[9px] font-bold uppercase tracking-wider font-mono bg-white/[0.01]">
+                          <th className="py-2.5 px-3 w-10 text-center">Sel.</th>
+                          <th className="py-2.5 px-3 w-24">Data</th>
+                          <th className="py-2.5 px-3">Descrição</th>
+                          <th className="py-2.5 px-3 w-28">Categoria</th>
+                          <th className="py-2.5 px-3 text-right w-24">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 font-sans">
+                        {parsedTransactions.map((tx, idx) => (
+                          <tr key={tx.id || idx} className={`hover:bg-white/[0.02] transition-colors ${tx.selected ? "" : "opacity-40"}`}>
+                            <td className="py-2 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                className="w-3.5 h-3.5 rounded border-white/10 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                checked={tx.selected}
+                                onChange={(e) => {
+                                  setParsedTransactions(parsedTransactions.map((t, i) => i === idx ? { ...t, selected: e.target.checked } : t));
+                                }}
+                              />
+                            </td>
+                            <td className="py-2 px-3">
+                              <input
+                                type="date"
+                                className="bg-[#111111] text-white border border-white/5 rounded px-1.5 py-0.5 text-[10px] font-mono outline-none"
+                                value={tx.date}
+                                onChange={(e) => {
+                                  setParsedTransactions(parsedTransactions.map((t, i) => i === idx ? { ...t, date: e.target.value } : t));
+                                }}
+                              />
+                            </td>
+                            <td className="py-2 px-3 font-semibold text-white truncate max-w-[150px]">
+                              <input
+                                type="text"
+                                className="bg-transparent text-white border-none focus:outline-none focus:bg-[#111111] px-1.5 py-0.5 text-[11px] w-full"
+                                value={tx.description}
+                                onChange={(e) => {
+                                  setParsedTransactions(parsedTransactions.map((t, i) => i === idx ? { ...t, description: e.target.value } : t));
+                                }}
+                              />
+                            </td>
+                            <td className="py-2 px-3">
+                              <select
+                                className="bg-[#111111] text-slate-300 border border-white/5 rounded px-1.5 py-0.5 text-[10px] outline-none cursor-pointer"
+                                value={tx.category}
+                                onChange={(e) => {
+                                  setParsedTransactions(parsedTransactions.map((t, i) => i === idx ? { ...t, category: e.target.value } : t));
+                                }}
+                              >
+                                <option value="Salário">Salário</option>
+                                <option value="Investimentos">Investimentos</option>
+                                <option value="Freelance">Freelance</option>
+                                <option value="Alimentação">Alimentação</option>
+                                <option value="Moradia">Moradia</option>
+                                <option value="Transporte">Transporte</option>
+                                <option value="Serviços">Serviços</option>
+                                <option value="Lazer">Lazer</option>
+                                <option value="Educação">Educação</option>
+                                <option value="Saúde">Saúde</option>
+                                <option value="Outros">Outros</option>
+                              </select>
+                            </td>
+                            <td className={`py-2 px-3 text-right font-bold font-mono text-[11px] ${tx.type === "income" ? "text-emerald-400" : "text-rose-400"}`}>
+                              R$ {tx.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Bulk Save Actions */}
+                  <div className="flex items-center gap-3 pt-4 border-t border-white/5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleCommitPdfImport}
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer shadow-md shadow-emerald-600/10 text-center"
+                    >
+                      Gravar Lançamentos Selecionados
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParsedTransactions([]);
+                        setImportingState("idle");
+                        setStatementFile(null);
+                      }}
+                      className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-bold uppercase rounded-xl transition cursor-pointer text-center"
+                    >
+                      Voltar / Descartar
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}

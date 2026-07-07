@@ -307,21 +307,26 @@ async function writeToOneDrive(accessToken: string, data: ExcelDatabase): Promis
 // Lazy Gemini initialization
 let aiInstance: GoogleGenAI | null = null;
 function getGeminiAI() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "") {
+  try {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "") {
+      return null;
+    }
+    if (!aiInstance) {
+      aiInstance = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: {
+          headers: {
+            "User-Agent": "aistudio-build",
+          },
+        },
+      });
+    }
+    return aiInstance;
+  } catch (err) {
+    console.error("Erro ao inicializar o cliente GoogleGenAI:", err);
     return null;
   }
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-  }
-  return aiInstance;
 }
 
 // REST APIs for Excel Simulator Database
@@ -795,7 +800,6 @@ Como posso ajudar você a planejar suas metas hoje?`;
   }
 });
 
-// Real AI PDF Bank Statement Parsing Endpoint using Gemini 3.5-flash
 app.post("/api/ai/parse-statement", async (req, res) => {
   const { fileBase64, fileName, text } = req.body;
   if (!fileBase64 && !text) {
@@ -803,13 +807,16 @@ app.post("/api/ai/parse-statement", async (req, res) => {
     return;
   }
 
-  const aiClient = getGeminiAI();
-  if (!aiClient) {
-    res.status(500).json({ error: "Chave do Gemini API não configurada no servidor." });
-    return;
-  }
-
   try {
+    const aiClient = getGeminiAI();
+    if (!aiClient) {
+      res.status(500).json({ 
+        error: "Chave do Gemini API não configurada ou motor de IA indisponível.",
+        details: "Verifique se a variável de ambiente GEMINI_API_KEY está configurada corretamente nas configurações do projeto Vercel."
+      });
+      return;
+    }
+
     const isTextMode = !!text;
     const documentSource = isTextMode 
       ? `Analise atentamente o texto a seguir, que foi extraído/copiado de um extrato bancário:\n\n${text}`
@@ -848,10 +855,16 @@ Retorne uma lista estruturada como um array JSON de objetos contendo exatamente 
     if (isTextMode) {
       parts.push({ text: prompt });
     } else {
+      let cleanedBase64 = fileBase64;
+      if (fileBase64.includes(";base64,")) {
+        cleanedBase64 = fileBase64.split(";base64,")[1];
+      }
+      cleanedBase64 = cleanedBase64.replace(/\s/g, "");
+
       parts.push({
         inlineData: {
           mimeType: "application/pdf",
-          data: fileBase64
+          data: cleanedBase64
         }
       });
       parts.push({ text: prompt });
@@ -893,7 +906,11 @@ Retorne uma lista estruturada como um array JSON de objetos contendo exatamente 
     res.json({ success: true, transactions });
   } catch (err: any) {
     console.error("Erro ao analisar o extrato com Gemini:", err);
-    res.status(500).json({ error: "Falha ao analisar o extrato bancário com inteligência artificial.", details: err.message });
+    res.status(500).json({ 
+      error: "Falha ao analisar o extrato bancário com inteligência artificial.", 
+      details: err.message,
+      tip: "Caso esteja em produção (Vercel), verifique se as credenciais GEMINI_API_KEY estão preenchidas no painel da Vercel. Como alternativa instantânea e 100% livre de servidor, utilize o novo painel de 'Lançamento Expresso ⚡' na aba manual."
+    });
   }
 });
 

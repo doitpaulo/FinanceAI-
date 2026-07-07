@@ -76,8 +76,11 @@ export function calculateFinancialScore(data: ExcelDatabase): number {
 export function calculateProjectedCashflow(data: ExcelDatabase, netCashBalance: number): number {
   if (!data) return netCashBalance;
 
-  // Obter o mês atual no formato YYYY-MM
-  const currentMonthStr = new Date().toISOString().substring(0, 7);
+  // Obter o mês atual no formato YYYY-MM usando timezone local para evitar o bug de UTC rollover
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const currentMonthStr = `${year}-${month}`;
 
   // Somar as receitas que o usuário de fato já recebeu este mês
   const actualIncomesThisMonth = (data.transactions || [])
@@ -90,9 +93,29 @@ export function calculateProjectedCashflow(data: ExcelDatabase, netCashBalance: 
   // A receita que ainda se espera receber é o total previsto menos o que já foi recebido
   const remainingExpectedIncomes = Math.max(0, totalExpectedIncomes - actualIncomesThisMonth);
 
-  // Somar apenas as despesas/contas previstas que ainda não foram pagas
+  // Somar apenas as despesas/contas previstas que ainda não foram pagas,
+  // com um matcher inteligente para evitar dupla dedução se o usuário lançou manualmente na lista de transações
   const unpaidExpectedExpenses = (data.expenses || [])
-    .filter(exp => !exp.paid)
+    .filter(exp => {
+      if (exp.paid) return false;
+
+      // Se existe uma transação no mês atual que parece pagar esta conta, desconsidere-a como pendente
+      const isPaidManually = (data.transactions || []).some(t => {
+        const isCurrentMonth = t.date.startsWith(currentMonthStr);
+        if (!isCurrentMonth) return false;
+
+        if (t.type !== "expense") return false;
+
+        // Se a descrição contém o nome da conta (ex: "Aluguel" contém "Aluguel Apartamento") ou se a categoria é igual e o valor é igual
+        const nameMatch = t.description.toLowerCase().includes(exp.name.toLowerCase()) || 
+                          exp.name.toLowerCase().includes(t.description.toLowerCase());
+        const categoryAndAmountMatch = t.category === exp.category && Math.abs(t.amount - exp.amount) < 0.01;
+
+        return nameMatch || categoryAndAmountMatch;
+      });
+
+      return !isPaidManually;
+    })
     .reduce((sum, exp) => sum + exp.amount, 0);
 
   return netCashBalance + remainingExpectedIncomes - unpaidExpectedExpenses;
