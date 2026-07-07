@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { Award, AlertCircle, ArrowUpRight, TrendingUp, Trash2, Pencil, Check, X } from "lucide-react";
+import { Award, AlertCircle, ArrowUpRight, TrendingUp, Trash2, Pencil, Check, X, Sparkles } from "lucide-react";
 import { ExcelDatabase, Goal } from "../types";
 import { safePercent } from "../lib/calculations";
 
@@ -22,6 +22,8 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
   const [current, setCurrent] = useState("");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  const [savingPlanValue, setSavingPlanValue] = useState("");
+  const [savingPlanFrequency, setSavingPlanFrequency] = useState<"daily" | "weekly" | "monthly">("monthly");
 
   // Editing Goal State
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
@@ -30,6 +32,8 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
   const [editCurrent, setEditCurrent] = useState("");
   const [editDeadline, setEditDeadline] = useState("");
   const [editPriority, setEditPriority] = useState<"low" | "medium" | "high">("medium");
+  const [editSavingPlanValue, setEditSavingPlanValue] = useState("");
+  const [editSavingPlanFrequency, setEditSavingPlanFrequency] = useState<"daily" | "weekly" | "monthly">("monthly");
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,12 +49,16 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
       currentValue: parseFloat(current) || 0,
       deadline: deadline || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
       priority,
-      status: "active"
+      status: "active",
+      savingPlanValue: savingPlanValue ? parseFloat(savingPlanValue) : undefined,
+      savingPlanFrequency: savingPlanValue ? savingPlanFrequency : undefined
     });
     setName("");
     setTarget("");
     setCurrent("");
     setDeadline("");
+    setSavingPlanValue("");
+    setSavingPlanFrequency("monthly");
   };
 
   const startEditGoal = (goal: Goal) => {
@@ -60,6 +68,8 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
     setEditCurrent(goal.currentValue.toString());
     setEditDeadline(goal.deadline);
     setEditPriority(goal.priority);
+    setEditSavingPlanValue(goal.savingPlanValue ? goal.savingPlanValue.toString() : "");
+    setEditSavingPlanFrequency(goal.savingPlanFrequency || "monthly");
   };
 
   const saveEditGoal = () => {
@@ -77,7 +87,9 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
         targetValue: tgt,
         currentValue: isNaN(curr) ? 0 : curr,
         deadline: editDeadline,
-        priority: editPriority
+        priority: editPriority,
+        savingPlanValue: editSavingPlanValue ? parseFloat(editSavingPlanValue) : undefined,
+        savingPlanFrequency: editSavingPlanValue ? editSavingPlanFrequency : undefined
       });
     }
     setEditingGoalId(null);
@@ -100,9 +112,18 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
               const progressPct = safePercent(goal.currentValue, goal.targetValue);
               const remainingValue = goal.targetValue - goal.currentValue;
               
-              // Estimate months remaining (heuristic based on average saving of R$ 1,150)
-              const averageMonthlySaving = 1150.00;
-              const monthsRemaining = remainingValue > 0 ? Math.ceil(remainingValue / averageMonthlySaving) : 0;
+              // Calculate remaining days, weeks, and months
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const deadlineDate = new Date(goal.deadline);
+              deadlineDate.setHours(0, 0, 0, 0);
+              
+              const diffTime = deadlineDate.getTime() - today.getTime();
+              const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+              
+              const requiredDaily = remainingValue > 0 ? remainingValue / diffDays : 0;
+              const requiredWeekly = remainingValue > 0 ? remainingValue / Math.max(1, diffDays / 7) : 0;
+              const requiredMonthly = remainingValue > 0 ? remainingValue / Math.max(1, diffDays / 30.41) : 0;
 
               return (
                 <div 
@@ -149,6 +170,28 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
                             value={editDeadline}
                             onChange={(e) => setEditDeadline(e.target.value)}
                           />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-mono text-slate-500 uppercase">Pretende Guardar (R$)</label>
+                          <input
+                            type="number"
+                            placeholder="Opcional"
+                            className="w-full px-2.5 py-1.5 bg-[#050505] border border-white/15 rounded-xl text-xs text-white font-mono"
+                            value={editSavingPlanValue}
+                            onChange={(e) => setEditSavingPlanValue(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-mono text-slate-500 uppercase">Frequência Planejada</label>
+                          <select
+                            className="w-full px-2.5 py-1.5 bg-[#050505] border border-white/15 rounded-xl text-xs text-white"
+                            value={editSavingPlanFrequency}
+                            onChange={(e) => setEditSavingPlanFrequency(e.target.value as any)}
+                          >
+                            <option value="daily">Diário</option>
+                            <option value="weekly">Semanal</option>
+                            <option value="monthly">Mensal</option>
+                          </select>
                         </div>
                       </div>
 
@@ -215,7 +258,7 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
                             {onEditGoal && (
                               <button
                                 onClick={() => startEditGoal(goal)}
-                                className="text-slate-500 hover:text-indigo-400 p-1.5 hover:bg-white/5 rounded-lg transition"
+                                className="text-slate-500 hover:text-indigo-400 p-1.5 hover:bg-white/5 rounded-lg transition cursor-pointer"
                                 title="Editar"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
@@ -225,7 +268,7 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
                               <button
                                 id={`delete-goal-${goal.id}`}
                                 onClick={() => onDeleteGoal(goal.id)}
-                                className="text-slate-500 hover:text-rose-400 p-1.5 hover:bg-white/5 rounded-lg transition"
+                                className="text-slate-500 hover:text-rose-400 p-1.5 hover:bg-white/5 rounded-lg transition cursor-pointer"
                                 title="Excluir"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -246,15 +289,135 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
                         </div>
                       </div>
 
-                      <div className="bg-[#050505] border border-white/5 rounded-2xl p-4 flex items-center justify-between">
-                        <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <AlertCircle className="w-3.5 h-3.5 text-indigo-400" />
-                          Estimativa de conquista:
-                        </span>
-                        <span className="text-xs text-white font-bold">
-                          {monthsRemaining > 0 ? `Em aproximadamente ${monthsRemaining} meses` : "Meta Concluída!"}
-                        </span>
-                      </div>
+                      {remainingValue > 0 ? (
+                        <div className="space-y-3 pt-2">
+                          {/* Required Savings Grid */}
+                          <div className="bg-[#050505] border border-white/5 rounded-2xl p-4 space-y-3">
+                            <div className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                              <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
+                              Quanto você precisa guardar para alcançar a meta:
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5 text-center">
+                                <div className="text-[9px] font-sans text-slate-500 font-medium">Diário</div>
+                                <div className="text-xs font-mono font-bold text-white mt-1">
+                                  R$ {requiredDaily.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </div>
+                              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5 text-center">
+                                <div className="text-[9px] font-sans text-slate-500 font-medium">Semanal</div>
+                                <div className="text-xs font-mono font-bold text-white mt-1">
+                                  R$ {requiredWeekly.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </div>
+                              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5 text-center">
+                                <div className="text-[9px] font-sans text-slate-500 font-medium">Mensal</div>
+                                <div className="text-xs font-mono font-bold text-white mt-1">
+                                  R$ {requiredMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-[10px] text-slate-500 font-sans text-center">
+                              Baseado em <span className="font-mono text-slate-400 font-semibold">{diffDays} dias</span> restantes até o prazo limite.
+                            </div>
+                          </div>
+
+                          {/* Planned Savings & Engagement Insight */}
+                          {goal.savingPlanValue ? (
+                            (() => {
+                              let planDailyEquivalent = 0;
+                              if (goal.savingPlanFrequency === "daily") {
+                                planDailyEquivalent = goal.savingPlanValue;
+                              } else if (goal.savingPlanFrequency === "weekly") {
+                                planDailyEquivalent = goal.savingPlanValue / 7;
+                              } else {
+                                planDailyEquivalent = goal.savingPlanValue / 30.41;
+                              }
+
+                              const isAhead = planDailyEquivalent >= requiredDaily;
+                              const daysWithPlan = Math.ceil(remainingValue / planDailyEquivalent);
+                              
+                              let planDeadlineText = "";
+                              if (daysWithPlan < 30) {
+                                planDeadlineText = `${daysWithPlan} ${daysWithPlan === 1 ? "dia" : "dias"}`;
+                              } else if (daysWithPlan < 365) {
+                                const mos = Math.ceil(daysWithPlan / 30.41);
+                                planDeadlineText = `${mos} ${mos === 1 ? "mês" : "meses"}`;
+                              } else {
+                                const yrs = (daysWithPlan / 365).toFixed(1);
+                                planDeadlineText = `${yrs} ${parseFloat(yrs) === 1 ? "ano" : "anos"}`;
+                              }
+
+                              const freqLabel = goal.savingPlanFrequency === "daily" ? "por dia" : goal.savingPlanFrequency === "weekly" ? "por semana" : "por mês";
+
+                              return (
+                                <div className={`p-4 rounded-2xl border ${
+                                  isAhead 
+                                    ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-400" 
+                                    : "bg-amber-950/20 border-amber-500/20 text-amber-400"
+                                } space-y-2`}>
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="w-4 h-4 animate-pulse shrink-0" />
+                                    <span className="text-xs font-bold uppercase tracking-wider font-sans">
+                                      Seu Plano de Economia Ativo
+                                    </span>
+                                  </div>
+                                  
+                                  <p className="text-xs font-sans text-slate-300">
+                                    Seu objetivo é poupar <strong className="text-white font-mono">R$ {goal.savingPlanValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> {freqLabel}.
+                                  </p>
+
+                                  <div className="text-[11px] font-sans text-slate-300 pt-1.5 border-t border-white/5 flex flex-col gap-1">
+                                    {isAhead ? (
+                                      <>
+                                        <span className="font-bold text-emerald-400 flex items-center gap-1">
+                                          🌟 Excelente ritmo! Você está no caminho certo!
+                                        </span>
+                                        <span>
+                                          Mantendo este plano, você alcançará seu sonho em aproximadamente <strong className="text-white font-mono">{planDeadlineText}</strong>, antes do prazo estipulado!
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="font-bold text-amber-400 flex items-center gap-1">
+                                          ⚠️ Atenção ao Prazo: Ritmo Abaixo do Necessário
+                                        </span>
+                                        <span>
+                                          Neste plano, você levará cerca de <strong className="text-white font-mono">{planDeadlineText}</strong> para conquistar o sonho. Considere guardar um pouco mais ou adiar o prazo limite para garantir a conquista.
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 text-center space-y-2">
+                              <div className="text-xs font-semibold text-slate-300 flex items-center justify-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                                Nenhum plano de economia definido
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed max-w-md mx-auto">
+                                Defina quanto você pretende guardar para comparar seu esforço planejado com as metas necessárias!
+                              </p>
+                              <button
+                                onClick={() => startEditGoal(goal)}
+                                className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold font-mono uppercase tracking-wider cursor-pointer"
+                              >
+                                Definir Plano de Economia ⚡
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-2xl p-4 flex items-center justify-between text-emerald-400">
+                          <span className="text-xs flex items-center gap-1.5 font-bold">
+                            🎉 Meta Concluída! Parabéns por realizar este sonho!
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -329,6 +492,34 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
                 <option value="medium">Média</option>
                 <option value="high">Alta (Urgente / Sobrevivência)</option>
               </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Pretende Guardar (R$)</label>
+                <input
+                  id="goal-plan-value-input"
+                  type="number"
+                  placeholder="Opcional"
+                  className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-sm font-mono text-white transition"
+                  value={savingPlanValue}
+                  onChange={(e) => setSavingPlanValue(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-mono text-slate-500 uppercase tracking-wider font-bold">Frequência</label>
+                <select
+                  id="goal-plan-frequency-select"
+                  className="w-full px-3 py-2 bg-[#050505] border border-white/10 rounded-xl outline-none focus:border-indigo-500 text-sm text-white transition"
+                  value={savingPlanFrequency}
+                  onChange={(e) => setSavingPlanFrequency(e.target.value as any)}
+                >
+                  <option value="daily">Diário</option>
+                  <option value="weekly">Semanal</option>
+                  <option value="monthly">Mensal</option>
+                </select>
+              </div>
             </div>
 
             <button

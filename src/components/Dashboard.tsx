@@ -117,9 +117,11 @@ export default function Dashboard({
   const [schedDay, setSchedDay] = useState("10");
 
   // Math Core
-  const totalAccountsBalance = data.accounts.reduce((sum, acc) => sum + (acc.isActive ? acc.balance : 0), 0);
+  const totalIncomes = (data.transactions || []).filter(t => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = (data.transactions || []).filter(t => t.type === "expense").reduce((sum, t) => sum + t.amount, 0);
+  const netCashBalance = totalIncomes - totalExpenses;
+  const totalAccountsBalance = netCashBalance;
   const totalCardsInvoice = data.cards.reduce((sum, card) => sum + card.currentInvoice, 0);
-  const netCashBalance = totalAccountsBalance - totalCardsInvoice;
   const activeGoals = data.goals.filter(g => g.status === "active");
   const projectedBalance = calculateProjectedCashflow(data, netCashBalance);
   const financialScore = calculateFinancialScore(data);

@@ -105,6 +105,8 @@ export interface Goal {
   deadline: string; // YYYY-MM-DD
   priority: 'low' | 'medium' | 'high';
   status: 'active' | 'completed';
+  savingPlanValue?: number;
+  savingPlanFrequency?: 'daily' | 'weekly' | 'monthly';
 }
 
 export interface CashFlow {
