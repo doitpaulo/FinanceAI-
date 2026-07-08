@@ -7,7 +7,7 @@ import React, { useState, useEffect } from "react";
 import { 
   LayoutDashboard, TrendingUp, Briefcase, Award, Bot, Settings, 
   Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut, Database,
-  ShieldAlert, AlertCircle, X
+  ShieldAlert, AlertCircle, X, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ExcelDatabase, Transaction, Asset, Liability, Goal, Profile, Settings as SettingsType, Expense, Account, Card } from "./types";
@@ -26,6 +26,9 @@ import { onAuthStateChanged } from "firebase/auth";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "lancamentos" | "fluxo" | "patrimonio" | "metas" | "coach" | "settings">("dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem("financeai_sidebar_collapsed") === "true";
+  });
   const [db, setDb] = useState<ExcelDatabase | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1138,11 +1141,27 @@ export default function App() {
       </AnimatePresence>
 
       {/* Persistent Left Sidebar Navigation - Hidden on mobile */}
-      <aside className="hidden md:flex w-64 border-r border-white/10 bg-[#111111] flex-col justify-between shrink-0" id="main-sidebar">
-        <div className="p-6 space-y-8">
-          {/* Logo Brand */}
-          <FinanceAILogo size="sm" />
-
+      <aside 
+        className={`hidden md:flex ${sidebarCollapsed ? "w-20" : "w-64"} border-r border-white/10 bg-[#111111] flex-col justify-between shrink-0 transition-all duration-300 ease-in-out`} 
+        id="main-sidebar"
+      >
+        <div className={`space-y-8 ${sidebarCollapsed ? "p-4" : "p-6"}`}>
+          {/* Logo Brand with Collapse Toggle Button */}
+          <div className={`flex items-center ${sidebarCollapsed ? "flex-col gap-4 justify-center" : "justify-between"}`}>
+            <FinanceAILogo size="sm" iconOnly={sidebarCollapsed} />
+            <button
+              onClick={() => {
+                const newValue = !sidebarCollapsed;
+                setSidebarCollapsed(newValue);
+                localStorage.setItem("financeai_sidebar_collapsed", String(newValue));
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition cursor-pointer shrink-0"
+              title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+ 
           {/* Nav List */}
           <nav className="space-y-1.5">
             {[
@@ -1158,44 +1177,57 @@ export default function App() {
                 id={`sidebar-nav-${tab.id}`}
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition cursor-pointer ${
+                className={`w-full flex items-center gap-3 py-3 rounded-xl text-sm font-semibold transition cursor-pointer relative ${
+                  sidebarCollapsed ? "px-2 justify-center" : "px-4"
+                } ${
                   activeTab === tab.id
                     ? "bg-indigo-600/10 text-indigo-400 font-bold border-l-2 border-indigo-500"
                     : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`}
+                title={sidebarCollapsed ? tab.label : undefined}
               >
                 {tab.icon}
-                <span className="flex-1 text-left">{tab.label}</span>
-                {tab.id === "fluxo" && hasNearCardDueDate() && (
+                {!sidebarCollapsed && <span className="flex-1 text-left truncate">{tab.label}</span>}
+                {!sidebarCollapsed && tab.id === "fluxo" && hasNearCardDueDate() && (
                   <span className="px-2 py-0.5 text-[9px] font-extrabold bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md uppercase tracking-wider shrink-0 animate-pulse">
                     Fatura
                   </span>
+                )}
+                {sidebarCollapsed && tab.id === "fluxo" && hasNearCardDueDate() && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 border border-[#111111] rounded-full animate-pulse" />
                 )}
               </button>
             ))}
           </nav>
         </div>
-
+ 
         {/* Sync Status Info Footer */}
-        <div className="p-6 border-t border-white/10 space-y-4">
-          <div className="flex items-center gap-2.5 bg-[#050505] border border-white/10 p-3 rounded-xl">
+        <div className={`border-t border-white/10 ${sidebarCollapsed ? "p-4 flex flex-col items-center gap-2" : "p-6 space-y-4"}`}>
+          <div 
+            className={`flex items-center ${sidebarCollapsed ? "justify-center p-2" : "gap-2.5 p-3"} bg-[#050505] border border-white/10 rounded-xl w-full`}
+            title={sidebarCollapsed ? (firebaseUser ? "Firebase Sincronizado" : "Modo Simulação Local") : undefined}
+          >
             {firebaseUser ? (
-              <Database className="w-4 h-4 text-amber-400 animate-pulse" />
+              <Database className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
             ) : (
-              <Database className="w-4 h-4 text-indigo-400" />
+              <Database className="w-4 h-4 text-indigo-400 shrink-0" />
             )}
-            <div className="text-left">
-              <span className="text-[10px] text-slate-500 uppercase font-mono block leading-none">Status</span>
-              <span className="text-xs text-slate-300 font-semibold block mt-1">
-                {firebaseUser ? "Firebase Ativo" : "Modo Simulação"}
-              </span>
-            </div>
+            {!sidebarCollapsed && (
+              <div className="text-left min-w-0">
+                <span className="text-[10px] text-slate-500 uppercase font-mono block leading-none truncate">Status</span>
+                <span className="text-xs text-slate-300 font-semibold block mt-1 truncate">
+                  {firebaseUser ? "Firebase Ativo" : "Modo Simulação"}
+                </span>
+              </div>
+            )}
           </div>
-          <p className="text-[10px] text-slate-500 font-sans leading-relaxed text-center">
-            {firebaseUser 
-              ? "Sua base de dados está 100% sincronizada com o Firebase Firestore."
-              : "Rodando em cache local do servidor Express. Conecte-se na nuvem."}
-          </p>
+          {!sidebarCollapsed && (
+            <p className="text-[10px] text-slate-500 font-sans leading-relaxed text-center">
+              {firebaseUser 
+                ? "Sua base de dados está 100% sincronizada com o Firebase Firestore."
+                : "Rodando em cache local do servidor Express. Conecte-se na nuvem."}
+            </p>
+          )}
         </div>
       </aside>
 
