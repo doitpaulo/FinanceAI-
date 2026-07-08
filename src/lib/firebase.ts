@@ -123,12 +123,38 @@ export async function fetchUserDatabaseFromFirestore(userId: string) {
   }
 }
 
+// Helper to recursively remove undefined values from an object before saving to Firestore
+function removeUndefined(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => removeUndefined(item));
+  }
+  if (typeof obj === 'object') {
+    if (obj instanceof Date) {
+      return obj;
+    }
+    const newObj: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        if (obj[key] !== undefined) {
+          newObj[key] = removeUndefined(obj[key]);
+        }
+      }
+    }
+    return newObj;
+  }
+  return obj;
+}
+
 // Save user database to Firestore
 export async function saveUserDatabaseToFirestore(userId: string, data: any) {
   const path = `user_databases/${userId}`;
   try {
     const docRef = doc(db, 'user_databases', userId);
-    await setDoc(docRef, data);
+    const cleanedData = removeUndefined(data);
+    await setDoc(docRef, cleanedData);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
