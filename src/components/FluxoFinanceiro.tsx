@@ -262,7 +262,7 @@ export default function FluxoFinanceiro({
                             )}
                           </div>
                           <p className="text-xs text-slate-500 font-mono">
-                            Vence dia: {bill.dueDate.split("-").reverse().join("/")}
+                            Vence dia: {bill.dueDate && typeof bill.dueDate === "string" && bill.dueDate.includes("-") ? bill.dueDate.split("-").reverse().join("/") : (bill.dueDate || "")}
                           </p>
                         </div>
                       </div>

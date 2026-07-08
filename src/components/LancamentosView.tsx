@@ -339,11 +339,13 @@ export default function LancamentosView({
     .filter(t => {
       if (t.type !== "income") return false;
       if (monthFilter !== "all") {
-        const m = t.date.split("-")[1];
+        const parts = (t.date || "").split("-");
+        const m = parts[1];
         if (m !== monthFilter) return false;
       }
       if (yearFilter !== "all") {
-        const y = t.date.split("-")[0];
+        const parts = (t.date || "").split("-");
+        const y = parts[0];
         if (y !== yearFilter) return false;
       }
       return true;
@@ -354,11 +356,13 @@ export default function LancamentosView({
     .filter(t => {
       if (t.type !== "expense") return false;
       if (monthFilter !== "all") {
-        const m = t.date.split("-")[1];
+        const parts = (t.date || "").split("-");
+        const m = parts[1];
         if (m !== monthFilter) return false;
       }
       if (yearFilter !== "all") {
-        const y = t.date.split("-")[0];
+        const parts = (t.date || "").split("-");
+        const y = parts[0];
         if (y !== yearFilter) return false;
       }
       return true;
@@ -824,14 +828,19 @@ export default function LancamentosView({
   };
 
   // Filter, Search, and Sort Logic
-  const allCategories = Array.from(new Set(data.transactions.map(t => t.category)));
-  const availableYears = Array.from(new Set(data.transactions.map(t => t.date.split("-")[0]))).sort().reverse();
+  const allCategories = Array.from(new Set(data.transactions.map(t => t.category || "Outros")));
+  const availableYears = Array.from(new Set(data.transactions.map(t => {
+    if (!t.date || typeof t.date !== "string") return new Date().getFullYear().toString();
+    return t.date.split("-")[0] || new Date().getFullYear().toString();
+  }))).sort().reverse();
   const years = availableYears.length > 0 ? availableYears : [new Date().getFullYear().toString()];
  
   const filteredTransactions = data.transactions.filter(t => {
     // 1. Search Query Match
-    const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          t.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const descriptionSafe = (t.description || "").toLowerCase();
+    const categorySafe = (t.category || "").toLowerCase();
+    const querySafe = (searchQuery || "").toLowerCase();
+    const matchesSearch = descriptionSafe.includes(querySafe) || categorySafe.includes(querySafe);
     
     // 2. Type Match
     const matchesType = typeFilter === "all" || t.type === typeFilter;
@@ -842,14 +851,16 @@ export default function LancamentosView({
     // 4. Month Match
     let matchesMonth = true;
     if (monthFilter !== "all") {
-      const m = t.date.split("-")[1];
+      const parts = (t.date || "").split("-");
+      const m = parts[1];
       matchesMonth = m === monthFilter;
     }
 
     // 5. Year Match
     let matchesYear = true;
     if (yearFilter !== "all") {
-      const y = t.date.split("-")[0];
+      const parts = (t.date || "").split("-");
+      const y = parts[0];
       matchesYear = y === yearFilter;
     }
 
@@ -1241,7 +1252,7 @@ export default function LancamentosView({
                                 // STANDARD COMPONENT ROW VIEW
                                 <>
                                   <td className="py-3.5 px-4 font-mono text-slate-400">
-                                    {tx.date.split("-").reverse().join("/")}
+                                    {tx.date && typeof tx.date === "string" && tx.date.includes("-") ? tx.date.split("-").reverse().join("/") : (tx.date || "")}
                                   </td>
                                   <td className="py-3.5 px-4 font-semibold text-white truncate max-w-[150px] sm:max-w-xs">
                                     <div className="flex items-center gap-1.5">

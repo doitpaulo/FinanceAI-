@@ -242,7 +242,7 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
                               Prioridade {goal.priority === "high" ? "Alta" : goal.priority === "medium" ? "Média" : "Baixa"}
                             </span>
                             <span className="text-xs text-slate-500 font-mono">
-                              Prazo: {goal.deadline.split("-").reverse().join("/")}
+                              Prazo: {goal.deadline && typeof goal.deadline === "string" && goal.deadline.includes("-") ? goal.deadline.split("-").reverse().join("/") : (goal.deadline || "")}
                             </span>
                           </div>
                         </div>
