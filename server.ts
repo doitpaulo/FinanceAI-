@@ -783,17 +783,33 @@ Como posso ajudar você a planejar suas metas hoje?`;
       parts: [{ text: msg.text }]
     }));
 
-    const chat = aiClient.chats.create({
-      model: "gemini-3.5-flash",
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-      },
-      history: mappedHistory
-    });
+    let response;
+    try {
+      const chat = aiClient.chats.create({
+        model: "gemini-3.5-flash",
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+        },
+        history: mappedHistory
+      });
 
-    const response = await chat.sendMessage({ message });
-    res.json({ text: response.text, model: "gemini-3.5-flash" });
+      response = await chat.sendMessage({ message });
+      res.json({ text: response.text, model: "gemini-3.5-flash" });
+    } catch (primaryErr: any) {
+      console.warn("Primary gemini-3.5-flash failed, falling back to gemini-3.1-flash-lite:", primaryErr);
+      const chat = aiClient.chats.create({
+        model: "gemini-3.1-flash-lite",
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+        },
+        history: mappedHistory
+      });
+
+      response = await chat.sendMessage({ message });
+      res.json({ text: response.text, model: "gemini-3.1-flash-lite" });
+    }
   } catch (err: any) {
     console.error("Erro na chamada do Gemini API:", err);
     res.status(500).json({ error: "Falha na comunicação com o cérebro de IA do Gemini." });
@@ -870,32 +886,63 @@ Retorne uma lista estruturada como um array JSON de objetos contendo exatamente 
       parts.push({ text: prompt });
     }
 
-    const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: {
-        parts
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              date: { type: Type.STRING, description: "YYYY-MM-DD format" },
-              description: { type: Type.STRING },
-              amount: { type: Type.NUMBER },
-              type: { type: Type.STRING, description: "'income' or 'expense'" },
-              category: { type: Type.STRING, description: "Must be one of the precise category strings allowed" },
-              selected: { type: Type.BOOLEAN }
-            },
-            required: ["id", "date", "description", "amount", "type", "category", "selected"]
-          }
+    let response;
+    try {
+      response = await aiClient.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: {
+          parts
         },
-        temperature: 0.1
-      }
-    });
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                date: { type: Type.STRING, description: "YYYY-MM-DD format" },
+                description: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                type: { type: Type.STRING, description: "'income' or 'expense'" },
+                category: { type: Type.STRING, description: "Must be one of the precise category strings allowed" },
+                selected: { type: Type.BOOLEAN }
+              },
+              required: ["id", "date", "description", "amount", "type", "category", "selected"]
+            }
+          },
+          temperature: 0.1
+        }
+      });
+    } catch (primaryErr: any) {
+      console.warn("Primary gemini-3.5-flash failed, falling back to gemini-3.1-flash-lite for parsing:", primaryErr);
+      response = await aiClient.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: {
+          parts
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                date: { type: Type.STRING, description: "YYYY-MM-DD format" },
+                description: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                type: { type: Type.STRING, description: "'income' or 'expense'" },
+                category: { type: Type.STRING, description: "Must be one of the precise category strings allowed" },
+                selected: { type: Type.BOOLEAN }
+              },
+              required: ["id", "date", "description", "amount", "type", "category", "selected"]
+            }
+          },
+          temperature: 0.1
+        }
+      });
+    }
 
     const responseText = response.text;
     if (!responseText) {

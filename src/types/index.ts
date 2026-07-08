@@ -35,6 +35,7 @@ export interface Account {
   type: 'checking' | 'savings' | 'wallet';
   balance: number;
   isActive: boolean;
+  initialBalance?: number;
 }
 
 export interface Card {

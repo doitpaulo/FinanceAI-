@@ -24,6 +24,48 @@ import FinanceAILogo from "./components/FinanceAILogo";
 import { auth, signInWithGoogle, logoutFirebase, fetchUserDatabaseFromFirestore, saveUserDatabaseToFirestore } from "./lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
+// Helper: Recalculate and reconcile accounts balances based on transactions and initialBalance
+const reconcileDatabase = (rawDb: ExcelDatabase | null): ExcelDatabase | null => {
+  if (!rawDb) return null;
+  if (!rawDb.accounts) return rawDb;
+  
+  const onboardingCompleted = rawDb.profile?.onboardingCompleted;
+  
+  const reconciledAccounts = rawDb.accounts.map(acc => {
+    // Find all transactions that belong to this account
+    const txSum = (rawDb.transactions || [])
+      .filter(t => t.accountId === acc.id)
+      .reduce((sum, t) => sum + (t.type === "income" ? t.amount : -t.amount), 0);
+    
+    // Determine the initial balance of the account
+    let initialBalance = acc.initialBalance;
+    
+    if (initialBalance === undefined) {
+      if (onboardingCompleted) {
+        if (acc.id === "acc-1") {
+          // Checking starts clean at 0
+          initialBalance = 0;
+        } else {
+          initialBalance = acc.balance - txSum;
+        }
+      } else {
+        initialBalance = acc.balance - txSum;
+      }
+    }
+    
+    return {
+      ...acc,
+      initialBalance,
+      balance: initialBalance + txSum
+    };
+  });
+  
+  return {
+    ...rawDb,
+    accounts: reconciledAccounts
+  };
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "lancamentos" | "fluxo" | "patrimonio" | "metas" | "coach" | "settings">("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -53,7 +95,7 @@ export default function App() {
       const res = await fetch("/api/db");
       if (!res.ok) throw new Error("Falha ao sincronizar com o banco de dados simulado.");
       const data = await res.json();
-      setDb(data);
+      setDb(reconcileDatabase(data));
       setError(null);
     } catch (err: any) {
       console.error(err);
@@ -74,7 +116,7 @@ export default function App() {
         try {
           const firestoreDb = await fetchUserDatabaseFromFirestore(user.uid);
           if (firestoreDb) {
-            setDb(firestoreDb as ExcelDatabase);
+            setDb(reconcileDatabase(firestoreDb as ExcelDatabase));
           } else {
             const currentYear = new Date().getFullYear();
             const defaultDb: ExcelDatabase = {
@@ -122,8 +164,9 @@ export default function App() {
               events: [],
               aiInsights: []
             };
-            await saveUserDatabaseToFirestore(user.uid, defaultDb);
-            setDb(defaultDb);
+            const reconciledDefault = reconcileDatabase(defaultDb) || defaultDb;
+            await saveUserDatabaseToFirestore(user.uid, reconciledDefault);
+            setDb(reconciledDefault);
           }
           setError(null);
         } catch (err: any) {
@@ -139,7 +182,7 @@ export default function App() {
           const localDbStr = localStorage.getItem(`financeai_local_db_${guestEmail}`);
           if (localDbStr) {
             try {
-              setDb(JSON.parse(localDbStr));
+              setDb(reconcileDatabase(JSON.parse(localDbStr)));
               setGuestMode(true);
               setLoading(false);
               setError(null);
@@ -186,17 +229,18 @@ export default function App() {
 
   // Post changes helper
   const saveDb = async (updatedDb: ExcelDatabase) => {
-    setDb(updatedDb);
+    const reconciled = reconcileDatabase(updatedDb) || updatedDb;
+    setDb(reconciled);
     if (firebaseUser) {
       try {
-        await saveUserDatabaseToFirestore(firebaseUser.uid, updatedDb);
+        await saveUserDatabaseToFirestore(firebaseUser.uid, reconciled);
       } catch (err) {
         console.error("Falha ao gravar no Firebase Firestore:", err);
         alert("Alerta: Seus dados estão em cache no navegador, mas houve falha ao sincronizar com a nuvem Firebase.");
       }
     } else if (localGuestEmail) {
       try {
-        localStorage.setItem(`financeai_local_db_${localGuestEmail}`, JSON.stringify(updatedDb));
+        localStorage.setItem(`financeai_local_db_${localGuestEmail}`, JSON.stringify(reconciled));
       } catch (err) {
         console.error("Falha ao gravar localmente no localStorage:", err);
       }
@@ -205,7 +249,7 @@ export default function App() {
         const res = await fetch("/api/db", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedDb)
+          body: JSON.stringify(reconciled)
         });
         if (!res.ok) throw new Error("Erro de gravação no Excel simulado.");
       } catch (err) {
@@ -251,11 +295,11 @@ export default function App() {
     const updatedAccounts = db.accounts.map(acc => {
       if (acc.id === "acc-1") {
         // Checking Account starts clean at 0
-        return { ...acc, balance: 0 };
+        return { ...acc, balance: 0, initialBalance: 0 };
       }
       if (acc.id === "acc-2") {
         // Savings/Emergency: direct input of savings
-        return { ...acc, balance: onboardingData.currentSavings };
+        return { ...acc, balance: onboardingData.currentSavings, initialBalance: onboardingData.currentSavings };
       }
       return acc;
     });
@@ -681,7 +725,19 @@ export default function App() {
     if (!db) return;
     const updated = {
       ...db,
-      accounts: db.accounts.map(a => a.id === id ? { ...a, ...updatedData } : a)
+      accounts: db.accounts.map(a => {
+        if (a.id === id) {
+          const merged = { ...a, ...updatedData };
+          if (updatedData.balance !== undefined) {
+            const txSum = (db.transactions || [])
+              .filter(t => t.accountId === id)
+              .reduce((sum, t) => sum + (t.type === "income" ? t.amount : -t.amount), 0);
+            merged.initialBalance = updatedData.balance - txSum;
+          }
+          return merged;
+        }
+        return a;
+      })
     };
     await saveDb(updated);
   };
@@ -1057,7 +1113,7 @@ export default function App() {
       <LoginView
         onLoginGoogle={handleLoginGoogleFirebase}
         onLoginLocal={(localDb, email) => {
-          setDb(localDb);
+          setDb(reconcileDatabase(localDb));
           setLocalGuestEmail(email);
           setGuestMode(true);
         }}
@@ -1074,7 +1130,7 @@ export default function App() {
         try {
           const firestoreDb = await fetchUserDatabaseFromFirestore(firebaseUser.uid);
           if (firestoreDb) {
-            setDb(firestoreDb as ExcelDatabase);
+            setDb(reconcileDatabase(firestoreDb as ExcelDatabase));
           } else {
             await fetchDb();
           }
