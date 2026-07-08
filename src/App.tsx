@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  LayoutDashboard, TrendingUp, Briefcase, Award, Bot, Settings, 
+  LayoutDashboard, TrendingUp, Briefcase, Award, Settings, 
   Sparkles, RefreshCw, Cloud, Link, AlertTriangle, LogOut, Database,
-  ShieldAlert, AlertCircle, X, ChevronLeft, ChevronRight
+  ShieldAlert, AlertCircle, X, ChevronLeft, ChevronRight, Activity
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ExcelDatabase, Transaction, Asset, Liability, Goal, Profile, Settings as SettingsType, Expense, Account, Card } from "./types";
@@ -16,7 +16,7 @@ import LancamentosView from "./components/LancamentosView";
 import FluxoFinanceiro from "./components/FluxoFinanceiro";
 import Patrimonio from "./components/Patrimonio";
 import MetasView from "./components/MetasView";
-import ConsultorIA from "./components/ConsultorIA";
+import AnalyticsView from "./components/AnalyticsView";
 import SettingsView from "./components/SettingsView";
 import OnboardingModal, { OnboardingData } from "./components/OnboardingModal";
 import LoginView from "./components/LoginView";
@@ -67,7 +67,7 @@ const reconcileDatabase = (rawDb: ExcelDatabase | null): ExcelDatabase | null =>
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "lancamentos" | "fluxo" | "patrimonio" | "metas" | "coach" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "lancamentos" | "fluxo" | "patrimonio" | "metas" | "analytics" | "settings">("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     return localStorage.getItem("financeai_sidebar_collapsed") === "true";
   });
@@ -1226,7 +1226,7 @@ export default function App() {
               { id: "fluxo", label: "Contas e Vencimentos", icon: <TrendingUp className="w-4.5 h-4.5" /> },
               { id: "patrimonio", label: "Bens e Patrimônio", icon: <Briefcase className="w-4.5 h-4.5" /> },
               { id: "metas", label: "Sonhos e Objetivos", icon: <Award className="w-4.5 h-4.5" /> },
-              { id: "coach", label: "Conversar com IA", icon: <Bot className="w-4.5 h-4.5" /> },
+              { id: "analytics", label: "Analítica & Saúde", icon: <Activity className="w-4.5 h-4.5" /> },
               { id: "settings", label: "Ajustes e Conta", icon: <Settings className="w-4.5 h-4.5" /> }
             ].map(tab => (
               <button
@@ -1413,8 +1413,8 @@ export default function App() {
                   onEditGoal={handleEditGoal}
                 />
               )}
-              {activeTab === "coach" && (
-                <ConsultorIA 
+              {activeTab === "analytics" && (
+                <AnalyticsView 
                   data={db} 
                 />
               )}
@@ -1458,7 +1458,7 @@ export default function App() {
           { id: "fluxo", label: "Contas", icon: <TrendingUp className="w-5 h-5" /> },
           { id: "patrimonio", label: "Bens", icon: <Briefcase className="w-5 h-5" /> },
           { id: "metas", label: "Sonhos", icon: <Award className="w-5 h-5" /> },
-          { id: "coach", label: "IA", icon: <Bot className="w-5 h-5" /> },
+          { id: "analytics", label: "Análise", icon: <Activity className="w-5 h-5" /> },
           { id: "settings", label: "Ajustes", icon: <Settings className="w-5 h-5" /> }
         ].map(tab => (
           <button

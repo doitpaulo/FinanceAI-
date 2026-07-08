@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { User, Shield, RefreshCw, Settings, Info, Cloud, Database, Sparkles, Camera, Check, Sliders, HelpCircle } from "lucide-react";
+import { User, Shield, RefreshCw, Settings, Info, Cloud, Database, Sparkles, Camera, Check, Sliders, HelpCircle, Bell, SlidersHorizontal } from "lucide-react";
 import { ExcelDatabase, Profile, Settings as SettingsType } from "../types";
 
 interface SettingsProps {
@@ -24,7 +24,7 @@ export default function SettingsView({
   onResetDatabase 
 }: SettingsProps) {
   // Navigation within Settings view
-  const [subTab, setSubTab] = useState<"profile" | "system">("profile");
+  const [subTab, setSubTab] = useState<"profile" | "budget" | "system">("profile");
 
   // Profile data states
   const [name, setName] = useState(data.profile.name);
@@ -104,6 +104,7 @@ export default function SettingsView({
       {/* Settings Navigation Sub-tabs */}
       <div className="flex border-b border-white/10 gap-2 pb-px" id="settings-subtabs">
         <button
+          type="button"
           onClick={() => setSubTab("profile")}
           className={`px-4 py-2.5 font-bold text-xs uppercase tracking-wider transition-all relative ${
             subTab === "profile" 
@@ -112,9 +113,22 @@ export default function SettingsView({
           }`}
           id="subtab-profile-config"
         >
-          Meu Perfil & Co-Piloto
+          Meu Perfil
         </button>
         <button
+          type="button"
+          onClick={() => setSubTab("budget")}
+          className={`px-4 py-2.5 font-bold text-xs uppercase tracking-wider transition-all relative ${
+            subTab === "budget" 
+              ? "text-indigo-400 border-b-2 border-indigo-500" 
+              : "text-slate-400 hover:text-white"
+          }`}
+          id="subtab-budget-config"
+        >
+          Orçamento & Alertas
+        </button>
+        <button
+          type="button"
           onClick={() => setSubTab("system")}
           className={`px-4 py-2.5 font-bold text-xs uppercase tracking-wider transition-all relative ${
             subTab === "system" 
