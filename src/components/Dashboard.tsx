@@ -118,11 +118,11 @@ export default function Dashboard({
 
   // Math Core
   const netCashBalance = (data.accounts || [])
-    .filter(acc => acc.isActive && (acc.type === "checking" || acc.type === "wallet"))
-    .reduce((sum, acc) => sum + acc.balance, 0);
+    .filter(acc => acc && acc.isActive && (acc.type === "checking" || acc.type === "wallet"))
+    .reduce((sum, acc) => sum + (acc?.balance || 0), 0);
   const totalAccountsBalance = netCashBalance;
-  const totalCardsInvoice = data.cards.reduce((sum, card) => sum + card.currentInvoice, 0);
-  const activeGoals = data.goals.filter(g => g.status === "active");
+  const totalCardsInvoice = (data.cards || []).reduce((sum, card) => sum + (card?.currentInvoice || 0), 0);
+  const activeGoals = (data.goals || []).filter(g => g && g.status === "active");
   const projectedBalance = calculateProjectedCashflow(data, netCashBalance);
   const financialScore = calculateFinancialScore(data);
 
@@ -142,7 +142,7 @@ export default function Dashboard({
 
   // Sync schedules and envelopes when data.profile.email or data.incomeSources changes
   useEffect(() => {
-    const expectedVal = data.incomeSources[0]?.expectedValue || 1600;
+    const expectedVal = (data.incomeSources || [])[0]?.expectedValue || 1600;
     const savedSchedules = localStorage.getItem(`financeai_schedules_${data.profile.email}`);
     if (savedSchedules) {
       try {
@@ -270,7 +270,7 @@ export default function Dashboard({
         });
       }
     } else if (simType === "divida") {
-      const debt = data.liabilities.find(l => l.id === simSelectedLiabilityId);
+      const debt = (data.liabilities || []).find(l => l && l.id === simSelectedLiabilityId);
       const name = debt ? debt.name : "Dívida";
       const remaining = debt ? debt.remainingValue : 500;
       setSimFeedback({
@@ -280,7 +280,7 @@ export default function Dashboard({
         impact: "Isso economiza juros caros cobrados pelos bancos e reduz seu aperto mensal!"
       });
     } else if (simType === "guardar") {
-      const targetGoal = data.goals.find(g => g.id === simSelectedGoalId);
+      const targetGoal = (data.goals || []).find(g => g && g.id === simSelectedGoalId);
       const name = targetGoal ? targetGoal.name : "Sonho";
       setSimFeedback({
         status: "SEGURO",
@@ -337,7 +337,7 @@ export default function Dashboard({
         onEditGoal(target.id, { currentValue: target.currentValue + amt });
       }
       if (onEditAccount) {
-        const checking = data.accounts.find(a => a.id === "acc-1");
+        const checking = (data.accounts || []).find(a => a && a.id === "acc-1");
         if (checking) onEditAccount("acc-1", { balance: checking.balance - amt });
       }
     }
@@ -363,7 +363,7 @@ export default function Dashboard({
       });
 
       if (onEditAccount) {
-        const checking = data.accounts.find(a => a.id === "acc-1");
+        const checking = (data.accounts || []).find(a => a && a.id === "acc-1");
         if (checking) onEditAccount("acc-1", { balance: checking.balance + item.amount });
       }
     }
@@ -417,14 +417,14 @@ export default function Dashboard({
   };
 
   // Variable income and envelopes
-  const totalExpensesThisMonth = data.expenses.reduce((sum, e) => sum + e.amount, 0);
-  const incomeThisMonth = data.transactions
-    .filter(t => t.type === "income" && t.date.startsWith(currentMonthStr))
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalExpensesThisMonth = (data.expenses || []).reduce((sum, e) => sum + (e?.amount || 0), 0);
+  const incomeThisMonth = (data.transactions || [])
+    .filter(t => t && t.type === "income" && t.date && typeof t.date === "string" && t.date.startsWith(currentMonthStr))
+    .reduce((sum, t) => sum + (t?.amount || 0), 0);
   const missingToCoverExpenses = Math.max(0, totalExpensesThisMonth - incomeThisMonth);
-  const incomeLast7Days = data.transactions
-    .filter(t => t.type === "income" && new Date(t.date) >= new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000))
-    .reduce((sum, t) => sum + t.amount, 0);
+  const incomeLast7Days = (data.transactions || [])
+    .filter(t => t && t.type === "income" && t.date && typeof t.date === "string" && new Date(t.date) >= new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000))
+    .reduce((sum, t) => sum + (t?.amount || 0), 0);
   const weeklyTarget = Math.round(totalExpensesThisMonth / 4) || 350;
 
   const handleEnvelopeAction = (e: React.FormEvent) => {
@@ -743,7 +743,7 @@ export default function Dashboard({
                           <label className="text-[9px] font-mono text-slate-500 block">Qual dívida?</label>
                           <select className="w-full px-2 py-1.5 bg-[#111111] border border-white/10 rounded-xl text-xs text-white cursor-pointer" value={simSelectedLiabilityId} onChange={(e) => setSimSelectedLiabilityId(e.target.value)}>
                             <option value="">-- Escolher Dívida --</option>
-                            {data.liabilities.map(l => <option key={l.id} value={l.id}>{l.name} (R$ {l.remainingValue})</option>)}
+                            {(data.liabilities || []).map(l => l && <option key={l.id} value={l.id}>{l.name} (R$ {l.remainingValue})</option>)}
                           </select>
                         </div>
                       )}
@@ -753,7 +753,7 @@ export default function Dashboard({
                           <label className="text-[9px] font-mono text-slate-500 block">Sonho Destino</label>
                           <select className="w-full px-2 py-1.5 bg-[#111111] border border-white/10 rounded-xl text-xs text-white cursor-pointer" value={simSelectedGoalId} onChange={(e) => setSimSelectedGoalId(e.target.value)}>
                             <option value="">-- Escolher Sonho --</option>
-                            {data.goals.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                            {(data.goals || []).map(g => g && <option key={g.id} value={g.id}>{g.name}</option>)}
                           </select>
                         </div>
                       )}
@@ -902,10 +902,10 @@ export default function Dashboard({
         <div className="md:col-span-2 space-y-3">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-indigo-400" /> Conselhos Compassivos</h3>
           <div className="space-y-2.5">
-            {data.aiInsights.slice(0, 2).map(ins => (
-              <div key={ins.id} className="p-4 bg-[#111111] border border-white/5 rounded-2xl flex gap-3 text-xs leading-relaxed">
+            {(data.aiInsights || []).slice(0, 2).map(ins => (
+              <div key={ins?.id || Math.random().toString()} className="p-4 bg-[#111111] border border-white/5 rounded-2xl flex gap-3 text-xs leading-relaxed">
                 <span className="text-indigo-400 mt-0.5">💡</span>
-                <p className="text-slate-300">{ins.insight}</p>
+                <p className="text-slate-300">{ins?.insight}</p>
               </div>
             ))}
           </div>

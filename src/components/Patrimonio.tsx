@@ -60,8 +60,8 @@ export default function Patrimonio({
   const [editLiabPay, setEditLiabPay] = useState("");
   const [editLiabMonths, setEditLiabMonths] = useState("");
 
-  const totalAssets = data.assets.reduce((sum, a) => sum + a.value, 0);
-  const totalLiabilities = data.liabilities.reduce((sum, l) => sum + l.remainingValue, 0);
+  const totalAssets = (data.assets || []).reduce((sum, a) => sum + (a?.value || 0), 0);
+  const totalLiabilities = (data.liabilities || []).reduce((sum, l) => sum + (l?.remainingValue || 0), 0);
 
   function totalValue(items: any[]) {
     return items.reduce((acc, curr) => acc + (curr.value || curr.balance || 0), 0);
@@ -146,7 +146,7 @@ export default function Patrimonio({
           <div className="space-y-1">
             <span className="text-slate-500 text-xs font-bold tracking-widest uppercase block font-mono">Tudo que eu tenho (Bens)</span>
             <span className="text-2xl font-display font-bold text-white">
-              R$ {(totalAssets + totalValue(data.accounts)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              R$ {(totalAssets + totalValue(data.accounts || [])).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
             <span className="text-[10px] text-slate-500 font-mono block">Soma de bens + contas bancárias</span>
           </div>
@@ -159,7 +159,7 @@ export default function Patrimonio({
           <div className="space-y-1">
             <span className="text-slate-500 text-xs font-bold tracking-widest uppercase block font-mono">Tudo que eu devo (Dívidas)</span>
             <span className="text-2xl font-display font-bold text-rose-400">
-              R$ {(totalLiabilities + totalValue(data.cards.map(c => ({ value: c.currentInvoice })))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              R$ {(totalLiabilities + totalValue((data.cards || []).map(c => ({ value: c?.currentInvoice || 0 })))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
             <span className="text-[10px] text-slate-500 font-mono block">Dívidas ativas + faturas abertas</span>
           </div>
@@ -173,7 +173,7 @@ export default function Patrimonio({
           <div className="space-y-1">
             <span className="text-slate-500 text-xs font-bold tracking-widest uppercase block font-mono">Meu Patrimônio Líquido</span>
             <span className="text-2xl font-display font-bold text-indigo-400">
-              R$ {(totalAssets + totalValue(data.accounts) - totalLiabilities - totalValue(data.cards.map(c => ({ value: c.currentInvoice })))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              R$ {(totalAssets + totalValue(data.accounts || []) - totalLiabilities - totalValue((data.cards || []).map(c => ({ value: c?.currentInvoice || 0 })))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
             <span className="text-[10px] text-slate-500 font-mono block">O seu saldo real de riqueza atual</span>
           </div>
@@ -196,7 +196,7 @@ export default function Patrimonio({
             <div className="divide-y divide-white/5">
               
               {/* Accounts balance listing */}
-              {data.accounts.map(acc => (
+              {(data.accounts || []).map(acc => (
                 <div key={acc.id} className="py-3 flex justify-between items-center text-sm">
                   <div className="flex-1">
                     <div className="font-semibold text-white">{acc.name}</div>
@@ -239,7 +239,7 @@ export default function Patrimonio({
               ))}
 
               {/* Assets listing */}
-              {data.assets.map(ast => (
+              {(data.assets || []).map(ast => (
                 <div key={ast.id} className="py-3 flex justify-between items-center text-sm">
                   {editingAssetId === ast.id ? (
                     <div className="w-full space-y-2 py-1">
@@ -378,7 +378,7 @@ export default function Patrimonio({
             <div className="divide-y divide-white/5">
               
               {/* Cards listing */}
-              {data.cards.map(c => (
+              {(data.cards || []).map(c => (
                 <div key={c.id} className="py-3 flex justify-between items-center text-sm">
                   <div className="flex-1">
                     <div className="font-semibold text-white">{c.name}</div>
@@ -421,7 +421,7 @@ export default function Patrimonio({
               ))}
 
               {/* Liabilities listing */}
-              {data.liabilities.map(l => (
+              {(data.liabilities || []).map(l => (
                 <div key={l.id} className="py-3 flex justify-between items-center text-sm">
                   {editingLiabId === l.id ? (
                     <div className="w-full space-y-2 py-1">
@@ -590,9 +590,9 @@ export default function Patrimonio({
 
         {/* ALERTA DE BOLA DE NEVE */}
         {(() => {
-          const totalMonthlyIncomeForSnowball = data.incomeSources.reduce((sum, inc) => sum + inc.expectedValue, 0) || 1200;
-          const totalMonthlyDebtPayments = data.liabilities.reduce((sum, l) => sum + l.monthlyPayment, 0) + 
-            data.cards.reduce((sum, c) => sum + (c.currentInvoice * 0.15), 0); // assume 15% payment for card
+          const totalMonthlyIncomeForSnowball = (data.incomeSources || []).reduce((sum, inc) => sum + (inc?.expectedValue || 0), 0) || 1200;
+          const totalMonthlyDebtPayments = (data.liabilities || []).reduce((sum, l) => sum + (l?.monthlyPayment || 0), 0) + 
+            (data.cards || []).reduce((sum, c) => sum + ((c?.currentInvoice || 0) * 0.15), 0); // assume 15% payment for card
           const debtServiceRatio = Math.round((totalMonthlyDebtPayments / totalMonthlyIncomeForSnowball) * 100);
 
           return (
@@ -634,8 +634,8 @@ export default function Patrimonio({
 
               {(() => {
                 const sortedLiabilities = [
-                  ...data.liabilities.map(l => ({ ...l, isCard: false, priority: l.remainingValue < 1000 ? 1 : 2 })),
-                  ...data.cards.map(c => ({ id: c.id, name: `Fatura ${c.name}`, remainingValue: c.currentInvoice, monthlyPayment: c.currentInvoice, isCard: true, priority: 3 }))
+                  ...(data.liabilities || []).map(l => ({ ...l, isCard: false, priority: l.remainingValue < 1000 ? 1 : 2 })),
+                  ...(data.cards || []).map(c => ({ id: c.id, name: `Fatura ${c.name}`, remainingValue: c.currentInvoice, monthlyPayment: c.currentInvoice, isCard: true, priority: 3 }))
                 ].sort((a, b) => b.priority - a.priority); // prioritize credit cards and smaller ones
 
                 if (sortedLiabilities.length === 0) {
@@ -696,8 +696,8 @@ export default function Patrimonio({
               const [installments, setInstallments] = useState("10");
 
               const activeDebtsForSim = [
-                ...data.liabilities.map(l => ({ id: l.id, name: l.name, value: l.remainingValue })),
-                ...data.cards.map(c => ({ id: c.id, name: `Cartão ${c.name}`, value: c.currentInvoice }))
+                ...(data.liabilities || []).map(l => ({ id: l.id, name: l.name, value: l.remainingValue })),
+                ...(data.cards || []).map(c => ({ id: c.id, name: `Cartão ${c.name}`, value: c.currentInvoice }))
               ];
 
               const selectedDebt = activeDebtsForSim.find(d => d.id === simId);

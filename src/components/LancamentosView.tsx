@@ -335,8 +335,9 @@ export default function LancamentosView({
     summaryPeriodLabel = `Ano ${yearFilter}`;
   }
 
-  const monthlyIncomes = data.transactions
+  const monthlyIncomes = (data.transactions || [])
     .filter(t => {
+      if (!t) return false;
       if (t.type !== "income") return false;
       if (monthFilter !== "all") {
         const parts = (t.date || "").split("-");
@@ -350,10 +351,11 @@ export default function LancamentosView({
       }
       return true;
     })
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
-  const monthlyExpenses = data.transactions
+  const monthlyExpenses = (data.transactions || [])
     .filter(t => {
+      if (!t) return false;
       if (t.type !== "expense") return false;
       if (monthFilter !== "all") {
         const parts = (t.date || "").split("-");
@@ -367,7 +369,7 @@ export default function LancamentosView({
       }
       return true;
     })
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
   const netBalance = monthlyIncomes - monthlyExpenses;
 
@@ -828,14 +830,14 @@ export default function LancamentosView({
   };
 
   // Filter, Search, and Sort Logic
-  const allCategories = Array.from(new Set(data.transactions.map(t => t.category || "Outros")));
-  const availableYears = Array.from(new Set(data.transactions.map(t => {
-    if (!t.date || typeof t.date !== "string") return new Date().getFullYear().toString();
+  const allCategories = Array.from(new Set((data.transactions || []).filter(t => t).map(t => t.category || "Outros")));
+  const availableYears = Array.from(new Set((data.transactions || []).filter(t => t && t.date && typeof t.date === "string").map(t => {
     return t.date.split("-")[0] || new Date().getFullYear().toString();
   }))).sort().reverse();
   const years = availableYears.length > 0 ? availableYears : [new Date().getFullYear().toString()];
  
-  const filteredTransactions = data.transactions.filter(t => {
+  const filteredTransactions = (data.transactions || []).filter(t => {
+    if (!t) return false;
     // 1. Search Query Match
     const descriptionSafe = (t.description || "").toLowerCase();
     const categorySafe = (t.category || "").toLowerCase();
@@ -870,16 +872,28 @@ export default function LancamentosView({
   // Sorting
   const sortedTransactions = filteredTransactions.slice().sort((a, b) => {
     if (sortBy === "date-desc") {
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+      const dateBVal = b && b.date ? new Date(b.date).getTime() : 0;
+      const dateB = isNaN(dateBVal) ? 0 : dateBVal;
+      const dateAVal = a && a.date ? new Date(a.date).getTime() : 0;
+      const dateA = isNaN(dateAVal) ? 0 : dateAVal;
+      return dateB - dateA;
     }
     if (sortBy === "date-asc") {
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
+      const dateBVal = b && b.date ? new Date(b.date).getTime() : 0;
+      const dateB = isNaN(dateBVal) ? 0 : dateBVal;
+      const dateAVal = a && a.date ? new Date(a.date).getTime() : 0;
+      const dateA = isNaN(dateAVal) ? 0 : dateAVal;
+      return dateA - dateB;
     }
     if (sortBy === "amount-desc") {
-      return b.amount - a.amount;
+      const amtB = b && typeof b.amount === "number" ? b.amount : 0;
+      const amtA = a && typeof a.amount === "number" ? a.amount : 0;
+      return amtB - amtA;
     }
     if (sortBy === "amount-asc") {
-      return a.amount - b.amount;
+      const amtB = b && typeof b.amount === "number" ? b.amount : 0;
+      const amtA = a && typeof a.amount === "number" ? a.amount : 0;
+      return amtA - amtB;
     }
     return 0;
   });

@@ -108,7 +108,7 @@ export default function MetasView({ data, onAddGoal, onDeleteGoal, onEditGoal }:
           </h3>
 
           <div className="space-y-4">
-            {data.goals.map(goal => {
+            {(data.goals || []).map(goal => {
               const progressPct = safePercent(goal.currentValue, goal.targetValue);
               const remainingValue = goal.targetValue - goal.currentValue;
               

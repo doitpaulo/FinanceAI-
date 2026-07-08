@@ -469,13 +469,13 @@ export default function App() {
         return sum + s.expectedValue;
       }, 0);
       const actualIncomeThisMonth = db.transactions
-        .filter(t => t.type === "income" && t.date.startsWith(currentMonthStr))
+        .filter(t => t.type === "income" && t.date && typeof t.date === "string" && t.date.startsWith(currentMonthStr))
         .reduce((sum, t) => sum + t.amount, 0);
 
       const incomeToCompare = Math.max(expectedIncome, actualIncomeThisMonth, 1600);
 
       const monthlyExpenses = db.transactions
-        .filter(t => t.type === "expense" && t.date.startsWith(currentMonthStr))
+        .filter(t => t.type === "expense" && t.date && typeof t.date === "string" && t.date.startsWith(currentMonthStr))
         .reduce((sum, t) => sum + t.amount, 0);
 
       const totalWithNew = monthlyExpenses + txData.amount;

@@ -84,7 +84,7 @@ export function calculateProjectedCashflow(data: ExcelDatabase, netCashBalance: 
 
   // Somar as receitas que o usuário de fato já recebeu este mês
   const actualIncomesThisMonth = (data.transactions || [])
-    .filter(t => t.type === "income" && t.date.startsWith(currentMonthStr))
+    .filter(t => t.type === "income" && t.date && typeof t.date === "string" && t.date.startsWith(currentMonthStr))
     .reduce((sum, t) => sum + t.amount, 0);
 
   // Total das receitas previstas configuradas
@@ -101,15 +101,16 @@ export function calculateProjectedCashflow(data: ExcelDatabase, netCashBalance: 
 
       // Se existe uma transação no mês atual que parece pagar esta conta, desconsidere-a como pendente
       const isPaidManually = (data.transactions || []).some(t => {
-        const isCurrentMonth = t.date.startsWith(currentMonthStr);
+        const isCurrentMonth = t.date && typeof t.date === "string" && t.date.startsWith(currentMonthStr);
         if (!isCurrentMonth) return false;
 
         if (t.type !== "expense") return false;
 
         // Se a descrição contém o nome da conta (ex: "Aluguel" contém "Aluguel Apartamento") ou se a categoria é igual e o valor é igual
-        const nameMatch = t.description.toLowerCase().includes(exp.name.toLowerCase()) || 
-                          exp.name.toLowerCase().includes(t.description.toLowerCase());
-        const categoryAndAmountMatch = t.category === exp.category && Math.abs(t.amount - exp.amount) < 0.01;
+        const descSafe = (t.description || "").toLowerCase();
+        const expNameSafe = (exp.name || "").toLowerCase();
+        const nameMatch = descSafe.includes(expNameSafe) || expNameSafe.includes(descSafe);
+        const categoryAndAmountMatch = t.category === exp.category && Math.abs((t.amount || 0) - (exp.amount || 0)) < 0.01;
 
         return nameMatch || categoryAndAmountMatch;
       });
