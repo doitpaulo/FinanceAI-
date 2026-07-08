@@ -1198,7 +1198,7 @@ export default function App() {
 
       {/* Persistent Left Sidebar Navigation - Hidden on mobile */}
       <aside 
-        className={`hidden md:flex ${sidebarCollapsed ? "w-20" : "w-64"} border-r border-white/10 bg-[#111111] flex-col justify-between shrink-0 transition-all duration-300 ease-in-out`} 
+        className={`hidden md:flex ${sidebarCollapsed ? "w-20" : "w-72"} border-r border-white/10 bg-[#111111] flex-col justify-between shrink-0 transition-all duration-300 ease-in-out`} 
         id="main-sidebar"
       >
         <div className={`space-y-8 ${sidebarCollapsed ? "p-4" : "p-6"}`}>
@@ -1222,10 +1222,10 @@ export default function App() {
           <nav className="space-y-1.5">
             {[
               { id: "dashboard", label: "Início (Resumo)", icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
-              { id: "lancamentos", label: "Lançamentos e Extratos", icon: <RefreshCw className="w-4.5 h-4.5" /> },
-              { id: "fluxo", label: "Contas do Mês (Vencimentos)", icon: <TrendingUp className="w-4.5 h-4.5" /> },
-              { id: "patrimonio", label: "Meu Dinheiro (Bens/Dívidas)", icon: <Briefcase className="w-4.5 h-4.5" /> },
-              { id: "metas", label: "Meus Sonhos e Objetivos", icon: <Award className="w-4.5 h-4.5" /> },
+              { id: "lancamentos", label: "Lançamentos e Extrato", icon: <RefreshCw className="w-4.5 h-4.5" /> },
+              { id: "fluxo", label: "Contas e Vencimentos", icon: <TrendingUp className="w-4.5 h-4.5" /> },
+              { id: "patrimonio", label: "Bens e Patrimônio", icon: <Briefcase className="w-4.5 h-4.5" /> },
+              { id: "metas", label: "Sonhos e Objetivos", icon: <Award className="w-4.5 h-4.5" /> },
               { id: "coach", label: "Conversar com IA", icon: <Bot className="w-4.5 h-4.5" /> },
               { id: "settings", label: "Ajustes e Conta", icon: <Settings className="w-4.5 h-4.5" /> }
             ].map(tab => (
