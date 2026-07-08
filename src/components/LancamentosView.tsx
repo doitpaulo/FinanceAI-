@@ -379,7 +379,7 @@ export default function LancamentosView({
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0 || !desc.trim()) return;
 
-    const executeAdd = () => {
+    const executeAdd = (bypass = false) => {
       onAddTransaction({
         type,
         amount: parsedAmount,
@@ -387,7 +387,8 @@ export default function LancamentosView({
         category,
         accountId,
         description: desc.trim(),
-        isRecurring
+        isRecurring,
+        bypassWarning: bypass
       });
 
       // Reset Form
@@ -408,14 +409,14 @@ export default function LancamentosView({
           ...warning,
           type: warning.type!,
           amount: parsedAmount,
-          onConfirm: executeAdd
+          onConfirm: () => executeAdd(true)
         });
         setShowWarningModal(true);
         return;
       }
     }
 
-    executeAdd();
+    executeAdd(false);
   };
 
   // Simulates reading a bank statement PDF and outputs mock rows
@@ -1321,7 +1322,7 @@ export default function LancamentosView({
       {/* POPUP WARNING INTERCEPTOR MODAL */}
       <AnimatePresence>
         {showWarningModal && warningDetails && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" id="spending-limit-warning-modal">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" id="spending-limit-warning-modal">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}

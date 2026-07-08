@@ -77,6 +77,7 @@ export interface Transaction {
   accountId: string;
   description: string;
   isRecurring: boolean;
+  bypassWarning?: boolean;
 }
 
 export interface Asset {

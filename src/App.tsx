@@ -428,7 +428,7 @@ export default function App() {
   const handleAddTransaction = async (txData: Omit<Transaction, "id">) => {
     if (!db) return;
 
-    if (txData.type === "expense") {
+    if (txData.type === "expense" && !txData.bypassWarning) {
       const todayStr = txData.date; // e.g. YYYY-MM-DD
       const currentMonthStr = todayStr.substring(0, 7);
 
@@ -1484,7 +1484,7 @@ export default function App() {
       {/* WARNING POPUP MODAL */}
       <AnimatePresence>
         {pendingTx && txWarnings && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[100] overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
